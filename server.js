@@ -420,13 +420,25 @@ app.get("/events/new", async (req, res, next) => {
   }
 });
 
-app.post("/events", async (req, res, next) => {
+app.get("/events/new/unplanned", async (req, res, next) => {
+  try {
+    return await sendEventForm(req, res, {
+      mode: "unplanned",
+      event: { planned: false, completed: true },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+async function handleEventCreation(req, res, next, { planned }) {
   const form = eventFormValues(req.body);
+  const mode = planned ? "create" : "unplanned";
   try {
     const availableCategories = await getEventCategories();
     if (!csrfMatches(req)) {
       return await sendEventForm(req, res, {
-        mode: "create",
+        mode,
         event: form,
         error: "This form expired. Refresh and try again.",
         status: 403,
@@ -437,7 +449,7 @@ app.post("/events", async (req, res, next) => {
     const parsed = parseEventForm(form, availableCategories);
     if (parsed.errors) {
       return await sendEventForm(req, res, {
-        mode: "create",
+        mode,
         event: form,
         errors: parsed.errors,
         status: 400,
@@ -446,7 +458,7 @@ app.post("/events", async (req, res, next) => {
     }
     if (parsed.error) {
       return await sendEventForm(req, res, {
-        mode: "create",
+        mode,
         event: form,
         error: parsed.error,
         status: 400,
@@ -456,13 +468,18 @@ app.post("/events", async (req, res, next) => {
 
     const [created] = await db
       .insert(events)
-      .values({ ...parsed.values, userId: req.currentUser.id })
+      .values({
+        ...parsed.values,
+        userId: req.currentUser.id,
+        planned,
+        completed: !planned,
+      })
       .returning({ id: events.id });
     return res.redirect(303, `/events/${created.id}`);
   } catch (error) {
     if (isEventConstraintError(error)) {
       return sendEventForm(req, res, {
-        mode: "create",
+        mode,
         event: form,
         error: "The event could not be saved. Check the details and try again.",
         status: 400,
@@ -470,7 +487,10 @@ app.post("/events", async (req, res, next) => {
     }
     return next(error);
   }
-});
+}
+
+app.post("/events", (req, res, next) => handleEventCreation(req, res, next, { planned: true }));
+app.post("/events/unplanned", (req, res, next) => handleEventCreation(req, res, next, { planned: false }));
 
 app.get("/events/:id/edit", async (req, res, next) => {
   const eventId = parsePositiveId(req.params.id);
