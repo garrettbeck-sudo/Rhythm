@@ -21,7 +21,7 @@
         height <= 0 ||
         left < 0 ||
         width <= 0 ||
-        top + height > 1440.5 ||
+        top + height > 1140.5 ||
         left + width > 100.5 ||
         !/^#[\da-f]{3,8}$/i.test(color)
       ) {

@@ -34,18 +34,20 @@ test("calendar time parsing maps midnight and noon to the correct hour positions
   assert.equal(timeToMinutes("23:59"), 1439);
 });
 
-test("the calendar day starts at 5 AM and places overnight times near the bottom", () => {
+test("the calendar day runs from 5 AM to midnight and omits earlier events", () => {
   const layout = layoutCalendarEvents([
     { id: 1, startTime: "05:00", endTime: "06:00" },
     { id: 2, startTime: "06:30", endTime: "07:00" },
-    { id: 3, startTime: "01:00", endTime: "01:30" },
-    { id: 4, startTime: "04:00", endTime: "04:30" },
+    { id: 3, startTime: "23:00", endTime: "23:30" },
+    { id: 4, startTime: "23:45", endTime: "23:59" },
+    { id: 5, startTime: "04:00", endTime: "04:30" },
   ]);
 
-  assert.deepEqual(layout.map(({ event, top }) => [event.id, top]), [
-    [1, 0],
-    [2, 90],
-    [3, 1200],
-    [4, 1380],
+  assert.deepEqual(layout.map(({ event, top, height }) => [event.id, top, height]), [
+    [1, 0, 60],
+    [2, 90, 30],
+    [3, 1080, 30],
+    [4, 1125, 15],
   ]);
+  assert.equal(layout.some(({ event }) => event.id === 5), false);
 });

@@ -3,18 +3,20 @@ function timeToMinutes(value) {
   return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
 }
 
-const CALENDAR_DAY_MINUTES = 24 * 60;
 const CALENDAR_START_MINUTES = 5 * 60;
+const CALENDAR_END_MINUTES = 24 * 60;
+const VISIBLE_DAY_MINUTES = CALENDAR_END_MINUTES - CALENDAR_START_MINUTES;
 
 function layoutCalendarEvents(events) {
   const sorted = events
     .map((event) => {
       const startMinutes = timeToMinutes(event.startTime);
       const endMinutes = timeToMinutes(event.endTime);
-      const start = (startMinutes - CALENDAR_START_MINUTES + CALENDAR_DAY_MINUTES) % CALENDAR_DAY_MINUTES;
+      const start = startMinutes - CALENDAR_START_MINUTES;
       const duration = Math.max(endMinutes - startMinutes, 30);
-      return { event, start, end: start + duration };
+      return { event, startMinutes, start, end: start + duration };
     })
+    .filter((item) => item.startMinutes >= CALENDAR_START_MINUTES && item.startMinutes < CALENDAR_END_MINUTES)
     .sort((left, right) => left.start - right.start || left.end - right.end);
   const positioned = [];
   let cluster = [];
@@ -32,7 +34,7 @@ function layoutCalendarEvents(events) {
     const laneCount = laneEnds.length;
     for (const item of cluster) {
       const top = item.start;
-      const height = Math.min(CALENDAR_DAY_MINUTES - top, Math.max(30, item.end - item.start));
+      const height = Math.min(VISIBLE_DAY_MINUTES - top, Math.max(30, item.end - item.start));
       positioned.push({
         event: item.event,
         top,
