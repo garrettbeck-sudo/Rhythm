@@ -10,6 +10,7 @@ function buildRoutineEventValues(userId, activeRoutines, weekDays) {
         categoryId: routine.categoryId,
         routineId: routine.id,
         title: routine.title,
+        notes: routine.notes || null,
         date: day.date,
         startTime: routine.startTime,
         endTime: routine.endTime,

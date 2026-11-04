@@ -409,6 +409,7 @@ a { color: inherit; }
 .routine-row-main { display: flex; flex: 1; min-width: 180px; flex-direction: column; gap: 7px; }
 .routine-row-title { overflow: hidden; color: #33463a; font: 500 19px/1.2 var(--display); text-overflow: ellipsis; }
 .routine-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #849087; font-size: 10px; }
+.routine-row-notes { max-width: 65ch; color: #6f7f72; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
 .routine-state { flex: 0 0 auto; padding: 5px 9px; border: 1px solid #e1e6dd; border-radius: 99px; color: #929b91; background: #f7f8f4; font-size: 9px; font-weight: 650; }
 .routine-state-active { border-color: #d8e5d4; color: #547858; background: #f0f5ec; }
 .routine-row-inactive .routine-row-main { opacity: .62; }

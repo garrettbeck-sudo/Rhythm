@@ -38,6 +38,7 @@ const routines = pgTable(
       .notNull()
       .references(() => categories.id),
     title: text("title").notNull(),
+    notes: text("notes"),
     dayOfWeek: integer("day_of_week").notNull(),
     startTime: text("start_time"),
     endTime: text("end_time"),

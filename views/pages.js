@@ -466,6 +466,7 @@ function renderRoutineListPage({ routines = [], email, csrfToken, notice }) {
     <div class="routine-row-main">
       <strong class="routine-row-title">${escapeHtml(routine.title)}</strong>
       <span class="routine-row-meta">${escapeHtml(routine.categoryName)} <span aria-hidden="true">·</span> ${days[routine.dayOfWeek]} <span aria-hidden="true">·</span> ${formatRoutineTimeRange(routine.startTime, routine.endTime)}</span>
+      ${routine.notes ? `<span class="routine-row-notes">${escapeHtml(routine.notes)}</span>` : ""}
     </div>
     <span class="routine-state${routine.active ? " routine-state-active" : ""}">${routine.active ? "Active" : "Paused"}</span>
     <div class="routine-row-actions">
@@ -547,6 +548,10 @@ function renderRoutineFormPage({ mode, routine = {}, categories = [], email, csr
             <div><label for="routine-end">Ends</label><input id="routine-end" name="endTime" type="time" value="${safe(routine.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
           </div>
           <p class="routine-time-hint">Leave both blank to create a routine without a scheduled time.</p>
+
+          <label for="routine-notes">Notes <span class="field-unit">optional</span></label>
+          <textarea id="routine-notes" name="notes" rows="4" maxlength="2000" placeholder="Anything helpful to remember for this routine"${describedBy("notes")}>${safe(routine.notes)}</textarea>
+          ${fieldError("notes")}
 
           <div class="routine-active-field">
             <input id="routine-active" name="active" type="checkbox" value="true"${routine.active ? " checked" : ""}>

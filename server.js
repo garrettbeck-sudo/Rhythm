@@ -260,12 +260,10 @@ function parseEventForm(form, availableCategories) {
   if (!category) errors.categoryId = "Please choose a category.";
   if (!date) errors.date = "Please choose a date.";
   else if (!isValidEventDate(date)) errors.date = "Please choose a valid date.";
-  if (Boolean(startTime) !== Boolean(endTime)) {
-    if (!startTime) errors.startTime = "Add both times, or leave both blank.";
-    if (!endTime) errors.endTime = "Add both times, or leave both blank.";
-  }
-  if (startTime && parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
-  if (endTime && parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+  if (!startTime) errors.startTime = "Please add a start time.";
+  else if (parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (!endTime) errors.endTime = "Please add an end time.";
+  else if (parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
 
   const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
   const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
@@ -290,8 +288,8 @@ function parseEventForm(form, availableCategories) {
       title,
       categoryId,
       date,
-      startTime: startTime || null,
-      endTime: endTime || null,
+      startTime,
+      endTime,
       notes: form.notes.trim() || null,
       distanceMi: distance.value,
       proteinG: protein.value,
@@ -336,6 +334,7 @@ function routineFormValues(body = {}, existing = {}, submitted = false) {
   return {
     id: existing.id,
     title: value("title", existing.title),
+    notes: value("notes", existing.notes),
     categoryId: value("categoryId", existing.categoryId),
     dayOfWeek: value("dayOfWeek", existing.dayOfWeek),
     startTime: value("startTime", existing.startTime),
@@ -350,6 +349,7 @@ function routineFormValues(body = {}, existing = {}, submitted = false) {
 
 function parseRoutineForm(form, availableCategories) {
   const title = form.title.trim();
+  const notes = form.notes.trim();
   const categoryId = parsePositiveId(form.categoryId);
   const category = availableCategories.find((item) => item.id === categoryId);
   const dayOfWeek = /^[0-6]$/.test(form.dayOfWeek) ? Number(form.dayOfWeek) : null;
@@ -359,12 +359,15 @@ function parseRoutineForm(form, availableCategories) {
 
   if (!title) errors.title = "Please add a title.";
   else if (title.length > 180) errors.title = "Please keep the title under 180 characters.";
+  if (notes.length > 2000) errors.notes = "Please keep notes under 2,000 characters.";
   if (!category) errors.categoryId = "Please choose a category.";
   if (dayOfWeek === null) errors.dayOfWeek = "Please choose a day.";
-  if (!startTime) errors.startTime = "Please add a start time.";
-  else if (parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
-  if (!endTime) errors.endTime = "Please add an end time.";
-  else if (parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+  if (Boolean(startTime) !== Boolean(endTime)) {
+    if (!startTime) errors.startTime = "Add both times, or leave both blank.";
+    if (!endTime) errors.endTime = "Add both times, or leave both blank.";
+  }
+  if (startTime && parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (endTime && parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
 
   const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
   const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
@@ -376,10 +379,11 @@ function parseRoutineForm(form, availableCategories) {
   return {
     values: {
       title,
+      notes: notes || null,
       categoryId,
       dayOfWeek,
-      startTime,
-      endTime,
+      startTime: startTime || null,
+      endTime: endTime || null,
       active: Boolean(form.active),
     },
   };
@@ -409,6 +413,7 @@ async function findRoutineForUser(routineId, userId) {
       categoryId: routines.categoryId,
       categoryName: categories.name,
       title: routines.title,
+      notes: routines.notes,
       dayOfWeek: routines.dayOfWeek,
       startTime: routines.startTime,
       endTime: routines.endTime,
@@ -433,6 +438,7 @@ async function generateRoutineEventsForWeek(userId, range) {
       id: routines.id,
       categoryId: routines.categoryId,
       title: routines.title,
+      notes: routines.notes,
       dayOfWeek: routines.dayOfWeek,
       startTime: routines.startTime,
       endTime: routines.endTime,
@@ -599,6 +605,7 @@ app.get("/routines", async (req, res, next) => {
         categoryId: routines.categoryId,
         categoryName: categories.name,
         title: routines.title,
+        notes: routines.notes,
         dayOfWeek: routines.dayOfWeek,
         startTime: routines.startTime,
         endTime: routines.endTime,
