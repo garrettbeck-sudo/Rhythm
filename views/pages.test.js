@@ -79,4 +79,5 @@ test("event form permits both times to be left blank", () => {
   assert.match(html, /Leave both blank to place this event in the Any Time row/);
   assert.doesNotMatch(html, /id="event-start"[^>]*required/);
   assert.doesNotMatch(html, /id="event-end"[^>]*required/);
+  assert.match(html, /src="\/assets\/events\.js\?v=2"/);
 });

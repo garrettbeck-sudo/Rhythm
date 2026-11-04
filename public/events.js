@@ -50,10 +50,12 @@
 
     const startSeconds = startTime.value ? timeInSeconds(startTime.value) : null;
     const endSeconds = endTime.value ? timeInSeconds(endTime.value) : null;
-    if (!startTime.value) errors.startTime = "Please add a start time.";
-    else if (startSeconds === null) errors.startTime = "Please enter a valid start time.";
-    if (!endTime.value) errors.endTime = "Please add an end time.";
-    else if (endSeconds === null) errors.endTime = "Please enter a valid end time.";
+    if (Boolean(startTime.value) !== Boolean(endTime.value)) {
+      if (!startTime.value) errors.startTime = "Add both times, or leave both blank.";
+      if (!endTime.value) errors.endTime = "Add both times, or leave both blank.";
+    }
+    if (startTime.value && startSeconds === null) errors.startTime = "Please enter a valid start time.";
+    if (endTime.value && endSeconds === null) errors.endTime = "Please enter a valid end time.";
     if (startSeconds !== null && endSeconds !== null && endSeconds <= startSeconds) {
       errors.endTime = "End time must be after start time.";
     }

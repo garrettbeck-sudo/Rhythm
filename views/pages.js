@@ -223,7 +223,7 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
     title: "My Week",
     bodyClass: "page-events page-calendar",
     content,
-    scripts: ["/assets/events.js", "/assets/calendar.js"],
+    scripts: ["/assets/events.js?v=2", "/assets/calendar.js"],
   });
 }
 
@@ -457,7 +457,7 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
     </section>
     <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: pageTitle, bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
+  return shell({ title: pageTitle, bodyClass: "page-events", content, scripts: ["/assets/events.js?v=2"] });
 }
 
 function renderRoutineListPage({ routines = [], email, csrfToken, notice }) {
@@ -676,7 +676,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
     title: isEdit ? "Edit event" : isUnplanned ? "Log unplanned event" : "New event",
     bodyClass: "page-events",
     content,
-    scripts: ["/assets/events.js"],
+    scripts: ["/assets/events.js?v=2"],
   });
 }
 
@@ -712,7 +712,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     </section>
     <footer class="week-footer"><span>Rhythm is here for the whole you.</span><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: event.title || "Event details", bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
+  return shell({ title: event.title || "Event details", bodyClass: "page-events", content, scripts: ["/assets/events.js?v=2"] });
 }
 
 function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
