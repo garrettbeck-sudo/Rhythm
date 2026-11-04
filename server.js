@@ -411,7 +411,6 @@ async function findRoutineForUser(routineId, userId) {
       startTime: routines.startTime,
       endTime: routines.endTime,
       active: routines.active,
-      active: routines.active,
     })
     .from(routines)
     .innerJoin(categories, eq(routines.categoryId, categories.id))
@@ -435,6 +434,7 @@ async function generateRoutineEventsForWeek(userId, range) {
       dayOfWeek: routines.dayOfWeek,
       startTime: routines.startTime,
       endTime: routines.endTime,
+      active: routines.active,
     })
     .from(routines)
     .where(and(eq(routines.userId, userId), eq(routines.active, true)));
