@@ -7,6 +7,7 @@ const {
   pgTable,
   text,
   unique,
+  uniqueIndex,
 } = require("drizzle-orm/pg-core");
 const { sql } = require("drizzle-orm");
 
@@ -72,6 +73,7 @@ const events = pgTable(
     notes: text("notes"),
   },
   (table) => [
+    uniqueIndex("events_routine_date_unique").on(table.routineId, table.date),
     check(
       "events_end_after_start",
       sql`${table.endTime}::time > ${table.startTime}::time`,
