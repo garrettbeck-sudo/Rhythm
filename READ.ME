@@ -1,1 +1,66 @@
+Rhythm
 
+Rhythm is a weekly planner for building healthy habits around a busy schedule. You add your fixed commitments (classes, work shifts, other responsibilities), plan workouts, meals, and habits into the open time, check items off as you finish them, and log anything you did that you didn't plan.
+
+Live app: [TODO: paste your deployed Replit URL here]
+
+What it does
+Accounts: sign up, log in, and log out. Each user sees only their own schedule.
+Plan your week: add events in six categories: Workout, Meal, Habit, Class, Work, and Responsibility.
+Check off planned items when you complete them.
+Log unplanned events, like a pickup game or a dinner out, so your week shows what really happened.
+Edit and delete any event. Deleting asks "Are you sure?" first.
+Star important events and see them on a Starred page.
+Search, filter, and sort by category, planned or unplanned, done or not done, title, notes, and date.
+Dashboard: a chart of completed versus planned items per week, plus this week's completion rate, workouts completed, and unplanned events logged.
+Weekly calendar view: a Mon–Sun grid with fixed commitments in gray and healthy items in color.
+Recurring routines: set something once (e.g., "Tue 6am rower intervals") and it appears every week.
+Conflict warning: you get a warning if you plan something on top of a class or work block.
+How to use it
+Sign up for an account.
+Add your classes and work shifts for the week.
+Add routines for things you do every week, like a training plan.
+Plan meals, workouts, and habits into your open time.
+Check items off as you finish them, and use Log unplanned for anything extra.
+Open the dashboard to see how closely your week matched your plan.
+Tools used
+Tool	What it's for
+Replit Agent	AI coding agent that built the features from my prompts
+Replit Database [TODO: confirm, e.g., PostgreSQL]	Stores users, events, categories, routines, and stars
+Replit Auth [TODO: confirm]	Sign up and login
+Replit Deployments	Hosts the live app
+GitHub	Version control. Every change goes through a branch and a pull request.
+[TODO: chart/calendar libraries, e.g., Chart.js, FullCalendar]	Dashboard chart and weekly view
+Database
+
+Five tables: users, categories, events (the main item), routines, and stars (a junction table linking users to events they starred). See schema.md for every column and relationship.
+
+How to run it
+
+On Replit (easiest)
+
+Open the project on Replit, or import this repo at replit.com/import.
+Click Run.
+
+Locally [TODO: confirm these commands match your stack]
+
+bash
+git clone https://github.com/[TODO: your-username]/rhythm.git
+cd rhythm
+npm install
+npm run dev
+
+Then open the local address shown in the terminal (often http://localhost:3000 or http://localhost:5000).
+
+If the app needs environment variables (for example, a database URL), copy them from Replit's Secrets tool into a .env file. Never commit that file.
+
+Running the tests
+
+[TODO: replace with the command your agent set up, e.g., npm test]
+
+Data isolation: User B can't see User A's events.
+Dashboard: with 4 planned items, 3 checked off, and 1 unplanned event, the completion rate shows 75%.
+Project docs
+PLAN.md: the original plan and the Plan vs. Reality comparison
+schema.md: database tables and relationships
+prompts/: the key prompts used to build each feature
