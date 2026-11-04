@@ -321,6 +321,10 @@ a { color: inherit; }
 .event-form textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .event-form input::placeholder, .event-form textarea::placeholder { color: #a0aaa0; }
 .event-form input:focus, .event-form select:focus, .event-form textarea:focus { border-color: #78977a; background: #fffefa; box-shadow: 0 0 0 3px rgba(99, 140, 106, .12); }
+.event-form [aria-invalid="true"] { border-color: #c77e6a; background: #fffaf7; }
+.event-form [aria-invalid="true"]:focus { border-color: #b96855; box-shadow: 0 0 0 3px rgba(185, 104, 85, .12); }
+.event-form .field-error { display: block; margin: -12px 0 15px; color: #975847; font-size: 11px; line-height: 1.45; }
+.event-form .field-error[hidden] { display: none; }
 .event-form select { appearance: none; padding-right: 38px; background-image: linear-gradient(45deg, transparent 50%, #829184 50%), linear-gradient(135deg, #829184 50%, transparent 50%); background-position: calc(100% - 17px) 20px, calc(100% - 12px) 20px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
 .event-time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .event-time-fields > div { min-width: 0; display: flex; flex-direction: column; }

@@ -235,10 +235,15 @@ function renderEventListPage({ events = [], email, csrfToken, notice }) {
   return shell({ title: "Your events", bodyClass: "page-events", content });
 }
 
-function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error }) {
+function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
   const isEdit = mode === "edit";
   const action = isEdit ? `/events/${encodeURIComponent(event.id)}/edit` : "/events";
   const safe = (value) => escapeHtml(value);
+  const fieldError = (name) => {
+    const message = typeof errors[name] === "string" ? errors[name] : "";
+    return `<span class="field-error" id="event-${name}-error" data-field-error="${name}" role="status" aria-live="polite"${message ? "" : " hidden"}>${safe(message)}</span>`;
+  };
+  const describedBy = (name) => ` aria-describedby="event-${name}-error"${errors[name] ? ' aria-invalid="true"' : ""}`;
   const categoryOptions = categories.map((category) => {
     const selected = String(category.id) === String(event.categoryId) ? " selected" : "";
     return `<option value="${safe(category.id)}" data-category-name="${safe(category.name)}"${selected}>${safe(category.name)}${category.isFixed ? " · fixed commitment" : ""}</option>`;
@@ -260,19 +265,22 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
         <form class="event-form" method="post" action="${action}" data-event-form>
           <input type="hidden" name="_csrf" value="${safe(csrfToken)}">
           <label for="event-title">Event title</label>
-          <input id="event-title" name="title" type="text" maxlength="180" placeholder="e.g. Morning swim" value="${safe(event.title)}" required>
+          <input id="event-title" name="title" type="text" maxlength="180" placeholder="e.g. Morning swim" value="${safe(event.title)}" required${describedBy("title")}>
+          ${fieldError("title")}
 
           <label for="event-category">Category</label>
-          <select id="event-category" name="categoryId" data-category-select required>
+          <select id="event-category" name="categoryId" data-category-select required${describedBy("categoryId")}>
             <option value="">Choose a category</option>${categoryOptions}
           </select>
+          ${fieldError("categoryId")}
 
           <label for="event-date">Date</label>
-          <input id="event-date" name="date" type="date" value="${safe(event.date)}" required>
+          <input id="event-date" name="date" type="date" value="${safe(event.date)}" required${describedBy("date")}>
+          ${fieldError("date")}
 
           <div class="event-time-fields">
-            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}" required></div>
-            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}" required></div>
+            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}" required${describedBy("startTime")}>${fieldError("startTime")}</div>
+            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}" required${describedBy("endTime")}>${fieldError("endTime")}</div>
           </div>
 
           <div class="event-category-field" data-category-field="Workout" data-field-name="distanceMi"${selectedCategoryName === "Workout" ? "" : " hidden"}>
