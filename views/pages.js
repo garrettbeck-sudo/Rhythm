@@ -101,70 +101,138 @@ function renderAuthPage({ mode, error, notice, csrfToken }) {
   });
 }
 
-function renderWeekPage({ email, csrfToken }) {
-  const safeEmail = escapeHtml(email);
-  const safeCsrf = escapeHtml(csrfToken);
-  const content = `<main class="week-shell">
-    <header class="week-header">
-      ${brandMark()}
-      <div class="account-actions">
-        <span class="account-email">${safeEmail}</span>
-        <form method="post" action="/logout" class="logout-form">
-          <input type="hidden" name="_csrf" value="${safeCsrf}">
-          <button class="button button-quiet" type="submit">Log out <span aria-hidden="true">↗</span></button>
-        </form>
-      </div>
-    </header>
+function timeToMinutes(value) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)/.exec(String(value ?? ""));
+  return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+}
 
-    <section class="week-intro">
-      <div class="intro-copy">
-        <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR SPACE, JUST FOR YOU</span>
+function formatCalendarTime(value) {
+  const minutes = timeToMinutes(value);
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const period = hour < 12 ? "AM" : "PM";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+function layoutCalendarEvents(events) {
+  const sorted = events
+    .map((event) => ({
+      event,
+      start: timeToMinutes(event.startTime),
+      end: Math.max(timeToMinutes(event.endTime), timeToMinutes(event.startTime) + 30),
+    }))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const positioned = [];
+  let cluster = [];
+  let clusterEnd = -1;
+
+  function finishCluster() {
+    if (!cluster.length) return;
+    const laneEnds = [];
+    for (const item of cluster) {
+      let lane = laneEnds.findIndex((end) => end <= item.start);
+      if (lane === -1) lane = laneEnds.length;
+      laneEnds[lane] = item.end;
+      item.lane = lane;
+    }
+    const laneCount = laneEnds.length;
+    for (const item of cluster) {
+      const top = item.start;
+      const height = Math.min(1440 - top, Math.max(30, item.end - item.start));
+      positioned.push({
+        event: item.event,
+        top,
+        height,
+        left: (item.lane / laneCount) * 100,
+        width: 100 / laneCount,
+      });
+    }
+    cluster = [];
+    clusterEnd = -1;
+  }
+
+  for (const item of sorted) {
+    if (cluster.length && item.start >= clusterEnd) finishCluster();
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  finishCluster();
+  return positioned;
+}
+
+function renderCalendarEvent(item, csrfToken) {
+  const { event } = item;
+  const color = safeCategoryColor(event.categoryColor);
+  const isHealthyPlannedItem = event.planned === true && ["Workout", "Meal", "Habit"].includes(event.categoryName);
+  const completionControl = isHealthyPlannedItem ? renderCompletionControl(event, csrfToken) : "";
+  const completedClass = event.completed ? " event-completed" : "";
+  const unplannedClass = event.planned === false ? " calendar-event-unplanned" : "";
+  const style = `--event-color:${color};top:${item.top}px;height:${item.height}px;left:${item.left}%;width:${item.width}%;`;
+  return `<article class="calendar-event${completedClass}${unplannedClass}" style="${style}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+    <a class="calendar-event-link" href="/events/${encodeURIComponent(event.id)}" title="${escapeHtml(event.title)}">
+      <span class="calendar-event-time">${formatCalendarTime(event.startTime)}–${formatCalendarTime(event.endTime)}</span>
+      <span class="calendar-event-title">${escapeHtml(event.title)}</span>
+      ${renderUnplannedLabel(event)}
+    </a>
+    ${completionControl ? `<span class="calendar-event-check">${completionControl}</span>` : ""}
+  </article>`;
+}
+
+function formatCalendarHour(hour) {
+  const displayHour = hour % 12 || 12;
+  return `${displayHour} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+function renderWeekPage({ email, csrfToken, events = [], range }) {
+  const eventsByDate = new Map(range.days.map((day) => [day.date, []]));
+  for (const event of events) {
+    if (eventsByDate.has(event.date)) eventsByDate.get(event.date).push(event);
+  }
+  const dayHeaders = range.days.map((day) => `<div class="calendar-day-header${day.isToday ? " calendar-today" : ""}" role="columnheader">
+    <span>${escapeHtml(day.dayName)}</span><strong>${day.dayNumber}</strong>
+  </div>`).join("");
+  const timeLabels = Array.from({ length: 24 }, (_, hour) => `<span class="calendar-hour-label" style="top:${hour * 60 + 4}px">${formatCalendarHour(hour)}</span>`).join("");
+  const dayColumns = range.days.map((day) => `<section class="calendar-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} ${day.date}">
+    ${layoutCalendarEvents(eventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
+  </section>`).join("");
+  const content = `<main class="week-shell event-shell calendar-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="calendar-intro">
+      <div>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR WEEK, YOUR PACE</span>
         <h1>My Week<span class="title-period">.</span></h1>
-        <p>Make room for what matters, and let the rest find its place.</p>
-        <div class="week-intro-links">
-          <a class="week-events-link" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
-          <a class="week-events-link" href="/dashboard">View your dashboard <span aria-hidden="true">↗</span></a>
-        </div>
+        <p>Classes, work, movement, meals, and habits in one view.</p>
       </div>
-      <div class="intro-orbit" aria-hidden="true">
-        <div class="intro-orbit-ring"></div>
-        <div class="intro-orbit-core"></div>
-        <span class="orbit-spark spark-a"></span>
-        <span class="orbit-spark spark-b"></span>
-        <span class="orbit-spark spark-c"></span>
-      </div>
+      <nav class="calendar-week-nav" aria-label="Choose week">
+        <a class="button button-secondary" href="/week?week=${encodeURIComponent(range.previousWeekStart)}" aria-label="Previous week">← <span>Previous</span></a>
+        <strong aria-live="polite">${escapeHtml(range.label)}</strong>
+        <a class="button button-secondary" href="/week?week=${encodeURIComponent(range.nextWeekStart)}" aria-label="Next week"><span>Next</span> →</a>
+      </nav>
     </section>
-
-    <section class="week-canvas" aria-labelledby="canvas-title">
-      <div class="canvas-topline"><span> A NOTE TO BEGIN</span><span class="canvas-rule"></span><span>01</span></div>
-      <div class="canvas-content">
-        <div class="canvas-illustration" aria-hidden="true">
-          <div class="paper-shadow"></div>
-          <div class="paper">
-            <span class="paper-sun"></span>
-            <span class="paper-stroke stroke-one"></span>
-            <span class="paper-stroke stroke-two"></span>
-            <span class="paper-stroke stroke-three"></span>
-            <span class="paper-leaf"></span>
+    <section class="calendar-panel" aria-label="Sunday to Saturday calendar">
+      <div class="calendar-scroll">
+        <div class="calendar-grid" role="grid" aria-label="Weekly event calendar">
+          <div class="calendar-grid-header" role="row">
+            <div class="calendar-time-heading" role="columnheader">TIME</div>
+            ${dayHeaders}
+          </div>
+          <div class="calendar-grid-body">
+            <aside class="calendar-time-axis" aria-hidden="true">${timeLabels}</aside>
+            <div class="calendar-day-columns">${dayColumns}</div>
           </div>
         </div>
-        <div class="canvas-message">
-          <span class="eyebrow">A GENTLE PLACE TO START</span>
-          <h2 id="canvas-title">Your week is<br>still full of possibility.</h2>
-          <p>Classes, work, a nourishing meal, a little movement, a moment to reset. There’s room for all of it here, at a pace that feels right to you.</p>
-          <div class="soft-reminder"><span class="reminder-dot"></span><span>Start small. You can always make more room.</span></div>
-        </div>
       </div>
-      <div class="canvas-footer"><span>Make the week yours</span><span class="footer-flourish" aria-hidden="true">〰</span></div>
+      ${events.length ? "" : '<p class="calendar-empty">No events are scheduled for this week.</p>'}
     </section>
-
-    <footer class="week-footer">
-      <span>Rhythm is here for the whole you.</span>
-      <span class="footer-heart" aria-hidden="true"></span>
-    </footer>
+    <footer class="week-footer"><a href="/events">Browse all events</a><span>One thing at a time.</span></footer>
   </main>`;
-
-  return shell({ title: "My week", bodyClass: "page-week", content });
+  return shell({
+    title: "My Week",
+    bodyClass: "page-events page-calendar",
+    content,
+    scripts: ["/assets/events.js"],
+  });
 }
 
 function eventHeader({ email, csrfToken }) {

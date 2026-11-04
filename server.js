@@ -5,6 +5,7 @@ const { and, asc, desc, eq, gte, ilike, lte, or } = require("drizzle-orm");
 const { db, pool } = require("./db");
 const { categories, events, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
+const { getCalendarWeekRange, isValidDateOnly } = require("./calendar/week");
 const {
   buildWeeklyChartData,
   calculateCurrentWeekStats,
@@ -394,9 +395,34 @@ app.post("/login", async (req, res, next) => {
 app.use(requireLogin());
 
 app.get("/", (req, res) => res.redirect(303, "/week"));
-app.get("/week", (req, res) => {
-  const csrfToken = issueCsrfToken(res);
-  res.type("html").send(renderWeekPage({ email: req.currentUser.email, csrfToken }));
+app.get("/week", async (req, res, next) => {
+  try {
+    const requestedDate = typeof req.query.week === "string" && isValidDateOnly(req.query.week)
+      ? req.query.week
+      : new Date();
+    const range = getCalendarWeekRange(requestedDate);
+    const weekEvents = await db
+      .select({
+        ...joinedEventSelection,
+      })
+      .from(events)
+      .innerJoin(categories, eq(events.categoryId, categories.id))
+      .where(and(
+        eq(events.userId, req.currentUser.id),
+        gte(events.date, range.weekStart),
+        lte(events.date, range.weekEnd),
+      ))
+      .orderBy(asc(events.date), asc(events.startTime), asc(events.id));
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(renderWeekPage({
+      email: req.currentUser.email,
+      csrfToken,
+      events: weekEvents,
+      range,
+    }));
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.get("/dashboard", async (req, res, next) => {
