@@ -210,18 +210,47 @@ function parseOptionalNumber(value) {
     : { valid: false, value: null };
 }
 
+function parseTimeInSeconds(value) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.(\d{1,6}))?)?$/.exec(value);
+  if (!match) return null;
+  return Number(match[1]) * 3600
+    + Number(match[2]) * 60
+    + Number(match[3] || 0)
+    + (match[4] ? Number(`0.${match[4]}`) : 0);
+}
+
+function isValidEventDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function parseEventForm(form, availableCategories) {
   const categoryId = parsePositiveId(form.categoryId);
   const category = availableCategories.find((item) => item.id === categoryId);
-  if (!category) return { error: "Choose a category before saving this event." };
-
   const title = form.title.trim();
   const date = form.date.trim();
   const startTime = form.startTime.trim();
   const endTime = form.endTime.trim();
-  if (!title || !date || !startTime || !endTime) {
-    return { error: "Complete the required event details before saving." };
+  const errors = {};
+
+  if (!title) errors.title = "Please add a title.";
+  if (!category) errors.categoryId = "Please choose a category.";
+  if (!date) errors.date = "Please choose a date.";
+  else if (!isValidEventDate(date)) errors.date = "Please choose a valid date.";
+  if (!startTime) errors.startTime = "Please add a start time.";
+  else if (parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (!endTime) errors.endTime = "Please add an end time.";
+  else if (parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+
+  const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
+  const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
+  if (startSeconds !== null && endSeconds !== null && endSeconds <= startSeconds) {
+    errors.endTime = "End time must be after start time.";
   }
+
+  if (Object.keys(errors).length) return { errors };
 
   const distance = category.name === "Workout"
     ? parseOptionalNumber(form.distanceMi)
@@ -247,7 +276,7 @@ function parseEventForm(form, availableCategories) {
   };
 }
 
-async function sendEventForm(req, res, { mode, event, error, status = 200, categories: availableCategories }) {
+async function sendEventForm(req, res, { mode, event, error, errors, status = 200, categories: availableCategories }) {
   const eventCategories = availableCategories || await getEventCategories();
   const csrfToken = issueCsrfToken(res);
   return res.status(status).type("html").send(
@@ -258,6 +287,7 @@ async function sendEventForm(req, res, { mode, event, error, status = 200, categ
       email: req.currentUser.email,
       csrfToken,
       error,
+      errors,
     }),
   );
 }
@@ -403,6 +433,15 @@ app.post("/events", async (req, res, next) => {
     }
 
     const parsed = parseEventForm(form, availableCategories);
+    if (parsed.errors) {
+      return await sendEventForm(req, res, {
+        mode: "create",
+        event: form,
+        errors: parsed.errors,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
     if (parsed.error) {
       return await sendEventForm(req, res, {
         mode: "create",
@@ -465,6 +504,15 @@ app.post("/events/:id/edit", async (req, res, next) => {
     }
 
     const parsed = parseEventForm(form, availableCategories);
+    if (parsed.errors) {
+      return await sendEventForm(req, res, {
+        mode: "edit",
+        event: form,
+        errors: parsed.errors,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
     if (parsed.error) {
       return await sendEventForm(req, res, {
         mode: "edit",
