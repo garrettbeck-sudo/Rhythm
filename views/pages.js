@@ -112,6 +112,20 @@ function formatCalendarTime(value) {
   return `${displayHour}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
+function isUntimedEvent(event) {
+  return event.startTime == null && event.endTime == null;
+}
+
+function formatEventTimeRange(startTime, endTime) {
+  if (startTime == null && endTime == null) return "Any time";
+  return `${escapeHtml(startTime)} <span aria-hidden="true">→</span> ${escapeHtml(endTime)}`;
+}
+
+function formatRoutineTimeRange(startTime, endTime) {
+  if (startTime == null && endTime == null) return "Any time";
+  return `${formatCalendarTime(startTime)}–${formatCalendarTime(endTime)}`;
+}
+
 function renderCalendarEvent(item, csrfToken) {
   const { event } = item;
   const color = safeCategoryColor(event.categoryColor);
@@ -129,24 +143,49 @@ function renderCalendarEvent(item, csrfToken) {
   </article>`;
 }
 
+function renderCalendarAllDayEvent(event, csrfToken) {
+  const color = safeCategoryColor(event.categoryColor);
+  const isHealthyPlannedItem = event.planned === true && ["Workout", "Meal", "Habit"].includes(event.categoryName);
+  const completionControl = isHealthyPlannedItem ? renderCompletionControl(event, csrfToken) : "";
+  const completedClass = event.completed ? " event-completed" : "";
+  const unplannedClass = event.planned === false ? " calendar-event-unplanned" : "";
+  return `<article class="calendar-event calendar-all-day-event${completedClass}${unplannedClass}" style="--event-color:${color}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+    <a class="calendar-event-link" href="/events/${encodeURIComponent(event.id)}" title="${escapeHtml(event.title)}">
+      <span class="calendar-event-title">${escapeHtml(event.title)}</span>
+      ${renderUnplannedLabel(event)}
+    </a>
+    ${completionControl ? `<span class="calendar-event-check">${completionControl}</span>` : ""}
+  </article>`;
+}
+
 function formatCalendarHour(hour) {
   const displayHour = hour % 12 || 12;
   return `${displayHour} ${hour < 12 ? "AM" : "PM"}`;
 }
 
 function renderWeekPage({ email, csrfToken, events = [], range }) {
-  const eventsByDate = new Map(range.days.map((day) => [day.date, []]));
+  const timedEventsByDate = new Map(range.days.map((day) => [day.date, []]));
+  const allDayEventsByDate = new Map(range.days.map((day) => [day.date, []]));
   for (const event of events) {
-    if (eventsByDate.has(event.date)) eventsByDate.get(event.date).push(event);
+    if (!timedEventsByDate.has(event.date)) continue;
+    const eventDate = isUntimedEvent(event) ? allDayEventsByDate : timedEventsByDate;
+    eventDate.get(event.date).push(event);
   }
+  const hasAllDayEvents = [...allDayEventsByDate.values()].some((dayEvents) => dayEvents.length > 0);
   const dayHeaders = range.days.map((day) => `<div class="calendar-day-header${day.isToday ? " calendar-today" : ""}" role="columnheader">
     <span>${escapeHtml(day.dayName)}</span><strong>${day.dayNumber}</strong>
   </div>`).join("");
+  const allDayRow = hasAllDayEvents ? `<div class="calendar-all-day-row" role="row">
+    <div class="calendar-all-day-label" role="rowheader">ANY TIME</div>
+    ${range.days.map((day) => `<section class="calendar-all-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} untimed events">
+      ${allDayEventsByDate.get(day.date).map((event) => renderCalendarAllDayEvent(event, csrfToken)).join("")}
+    </section>`).join("")}
+  </div>` : "";
   const calendarHours = Array.from({ length: 19 }, (_, index) => index + 5);
   const timeLabels = calendarHours.map((hour) => `<span class="calendar-hour-label">${formatCalendarHour(hour)}</span>`).join("") +
     `<span class="calendar-hour-label calendar-midnight-end">${formatCalendarHour(0)}</span>`;
   const dayColumns = range.days.map((day) => `<section class="calendar-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} ${day.date}">
-    ${layoutCalendarEvents(eventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
+    ${layoutCalendarEvents(timedEventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
   </section>`).join("");
   const content = `<main class="week-shell event-shell calendar-shell">
     ${eventHeader({ email, csrfToken })}
@@ -169,6 +208,7 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
             <div class="calendar-time-heading" role="columnheader">TIME</div>
             ${dayHeaders}
           </div>
+          ${allDayRow}
           <div class="calendar-grid-body">
             <aside class="calendar-time-axis" aria-hidden="true">${timeLabels}</aside>
             <div class="calendar-day-columns">${dayColumns}</div>
@@ -364,7 +404,7 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
           <span class="event-row-title">${escapeHtml(event.title)}</span>
           <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}${renderUnplannedLabel(event)}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
         </a>
-        <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
+        <span class="event-row-time">${formatEventTimeRange(event.startTime, event.endTime)}</span>
         ${renderStarControl(event, csrfToken, "event-star-button-list")}
         <a class="event-row-arrow" href="/events/${encodeURIComponent(event.id)}" aria-label="Open ${escapeHtml(event.title)}">↗</a>
         <span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span>
@@ -425,7 +465,7 @@ function renderRoutineListPage({ routines = [], email, csrfToken, notice }) {
   const rows = routines.map((routine) => `<article class="event-row routine-row${routine.active ? "" : " routine-row-inactive"}">
     <div class="routine-row-main">
       <strong class="routine-row-title">${escapeHtml(routine.title)}</strong>
-      <span class="routine-row-meta">${escapeHtml(routine.categoryName)} <span aria-hidden="true">·</span> ${days[routine.dayOfWeek]} <span aria-hidden="true">·</span> ${formatCalendarTime(routine.startTime)}–${formatCalendarTime(routine.endTime)}</span>
+      <span class="routine-row-meta">${escapeHtml(routine.categoryName)} <span aria-hidden="true">·</span> ${days[routine.dayOfWeek]} <span aria-hidden="true">·</span> ${formatRoutineTimeRange(routine.startTime, routine.endTime)}</span>
     </div>
     <span class="routine-state${routine.active ? " routine-state-active" : ""}">${routine.active ? "Active" : "Paused"}</span>
     <div class="routine-row-actions">
@@ -503,9 +543,10 @@ function renderRoutineFormPage({ mode, routine = {}, categories = [], email, csr
           ${fieldError("dayOfWeek")}
 
           <div class="event-time-fields">
-            <div><label for="routine-start">Starts</label><input id="routine-start" name="startTime" type="time" value="${safe(routine.startTime)}" required${describedBy("startTime")}>${fieldError("startTime")}</div>
-            <div><label for="routine-end">Ends</label><input id="routine-end" name="endTime" type="time" value="${safe(routine.endTime)}" required${describedBy("endTime")}>${fieldError("endTime")}</div>
+            <div><label for="routine-start">Starts</label><input id="routine-start" name="startTime" type="time" value="${safe(routine.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
+            <div><label for="routine-end">Ends</label><input id="routine-end" name="endTime" type="time" value="${safe(routine.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
           </div>
+          <p class="routine-time-hint">Leave both blank to create a routine without a scheduled time.</p>
 
           <div class="routine-active-field">
             <input id="routine-active" name="active" type="checkbox" value="true"${routine.active ? " checked" : ""}>
@@ -536,7 +577,7 @@ function renderRoutineDeleteConfirmationPage({ routine = {}, email, csrfToken })
         <p class="delete-copy">This stops new weekly events from being created. Events already created from this routine will remain in your week.</p>
         <div class="routine-delete-summary">
           <strong>${escapeHtml(routine.title)}</strong>
-          <span>${escapeHtml(routine.categoryName)} · ${days[routine.dayOfWeek]} · ${formatCalendarTime(routine.startTime)}–${formatCalendarTime(routine.endTime)}</span>
+          <span>${escapeHtml(routine.categoryName)} · ${days[routine.dayOfWeek]} · ${formatRoutineTimeRange(routine.startTime, routine.endTime)}</span>
         </div>
         <form method="post" action="/routines/${encodeURIComponent(routine.id)}/delete" class="delete-actions">
           <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
@@ -652,7 +693,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
         ${completionControl ? `<div class="event-detail-completion">${completionControl}<span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span></div>` : ""}
         <div class="event-detail-schedule">
           <div class="schedule-icon" aria-hidden="true"></div>
-          <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span></div>
+           <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${formatEventTimeRange(event.startTime, event.endTime)}</span></div>
         </div>
         ${optionalDetails ? `<div class="event-detail-extras">${optionalDetails}</div>` : ""}
         ${event.notes ? `<div class="event-notes"><span class="detail-label">A NOTE TO YOURSELF</span><p>${escapeHtml(event.notes)}</p></div>` : ""}
@@ -679,7 +720,7 @@ function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
         <span class="eyebrow">A MOMENT BEFORE YOU LET GO</span>
         <h1>Are you sure?</h1>
         <p class="delete-copy">This will remove <strong>${escapeHtml(event.title)}</strong> from your plans. You won't be able to undo this.</p>
-        <div class="delete-event-summary${unplannedClass}"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${escapeHtml(event.startTime)}–${escapeHtml(event.endTime)}</small></span>${renderUnplannedLabel(event)}</div>
+         <div class="delete-event-summary${unplannedClass}"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${formatEventTimeRange(event.startTime, event.endTime)}</small></span>${renderUnplannedLabel(event)}</div>
         <form method="post" action="/events/${encodeURIComponent(event.id)}/delete" class="delete-actions">
           <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
           <input type="hidden" name="confirmDelete" value="yes">

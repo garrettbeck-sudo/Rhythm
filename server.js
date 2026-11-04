@@ -260,10 +260,12 @@ function parseEventForm(form, availableCategories) {
   if (!category) errors.categoryId = "Please choose a category.";
   if (!date) errors.date = "Please choose a date.";
   else if (!isValidEventDate(date)) errors.date = "Please choose a valid date.";
-  if (!startTime) errors.startTime = "Please add a start time.";
-  else if (parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
-  if (!endTime) errors.endTime = "Please add an end time.";
-  else if (parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+  if (Boolean(startTime) !== Boolean(endTime)) {
+    if (!startTime) errors.startTime = "Add both times, or leave both blank.";
+    if (!endTime) errors.endTime = "Add both times, or leave both blank.";
+  }
+  if (startTime && parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (endTime && parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
 
   const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
   const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
@@ -288,8 +290,8 @@ function parseEventForm(form, availableCategories) {
       title,
       categoryId,
       date,
-      startTime,
-      endTime,
+      startTime: startTime || null,
+      endTime: endTime || null,
       notes: form.notes.trim() || null,
       distanceMi: distance.value,
       proteinG: protein.value,

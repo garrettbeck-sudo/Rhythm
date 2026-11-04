@@ -253,6 +253,13 @@ a { color: inherit; }
 .calendar-day-header { display: flex; min-height: 58px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-left: 1px solid #e8ede5; color: #7f8d81; font-size: 9px; }
 .calendar-day-header strong { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 50%; color: #56675a; font-size: 12px; font-weight: 600; }
 .calendar-day-header.calendar-today strong { color: #fff; background: var(--green-dark); }
+.calendar-all-day-row { display: grid; grid-template-columns: 66px repeat(7, minmax(120px, 1fr)); border-bottom: 1px solid #e1e8de; background: #fbfcf8; }
+.calendar-all-day-label { display: flex; align-items: flex-start; justify-content: flex-end; padding: 11px 9px 0 0; color: #929e93; font-size: 7px; font-weight: 650; letter-spacing: .08em; }
+.calendar-all-day-column { display: flex; min-height: 42px; flex-direction: column; gap: 4px; padding: 5px; border-left: 1px solid #e8ede5; }
+.calendar-all-day-column.calendar-today { background: rgba(230, 238, 225, .2); }
+.calendar-all-day-event { min-height: 30px; padding: 5px 24px 5px 7px; }
+.calendar-all-day-event .calendar-event-link { height: auto; min-height: 18px; padding-right: 0; }
+.calendar-all-day-event .calendar-event-title { font-size: 10px; }
 .calendar-grid-body { display: grid; grid-template-columns: 66px minmax(0, 1fr); }
 .calendar-time-axis { position: relative; display: grid; height: 1152px; grid-template-rows: repeat(19, 60px) 12px; background: #f9fbf6; }
 .calendar-hour-label { align-self: start; justify-self: end; transform: translateY(-50%); color: #929e93; font-size: 9px; white-space: nowrap; }
@@ -414,6 +421,7 @@ a { color: inherit; }
 .routine-delete-summary { display: flex; flex-direction: column; gap: 6px; margin: 20px 0 24px; padding: 15px 16px; border: 1px solid #e1e8de; border-radius: 12px; background: #f7f9f4; }
 .routine-delete-summary strong { color: #445548; font: 500 19px/1.2 var(--display); }
 .routine-delete-summary span { color: #7e8b80; font-size: 10px; }
+.routine-time-hint { margin: -8px 0 18px; color: #859186; font-size: 10px; }
 .week-footer a { color: inherit; text-decoration: none; }
 .week-footer a:hover { color: var(--green-dark); }
 

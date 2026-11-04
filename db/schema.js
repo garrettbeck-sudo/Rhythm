@@ -39,14 +39,18 @@ const routines = pgTable(
       .references(() => categories.id),
     title: text("title").notNull(),
     dayOfWeek: integer("day_of_week").notNull(),
-    startTime: text("start_time").notNull(),
-    endTime: text("end_time").notNull(),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
     active: boolean("active").notNull(),
   },
   (table) => [
     check(
       "routines_day_of_week_range",
       sql`${table.dayOfWeek} BETWEEN 0 AND 6`,
+    ),
+    check(
+      "routines_time_range",
+      sql`(${table.startTime} IS NULL AND ${table.endTime} IS NULL) OR (${table.startTime} IS NOT NULL AND ${table.endTime} IS NOT NULL AND ${table.endTime}::time > ${table.startTime}::time)`,
     ),
   ],
 );
@@ -64,8 +68,8 @@ const events = pgTable(
     routineId: integer("routine_id").references(() => routines.id),
     title: text("title").notNull(),
     date: date("date", { mode: "string" }).notNull(),
-    startTime: text("start_time").notNull(),
-    endTime: text("end_time").notNull(),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
     planned: boolean("planned").notNull().default(true),
     completed: boolean("completed").notNull().default(false),
     distanceMi: doublePrecision("distance_mi"),
@@ -76,7 +80,7 @@ const events = pgTable(
     uniqueIndex("events_routine_date_unique").on(table.routineId, table.date),
     check(
       "events_end_after_start",
-      sql`${table.endTime}::time > ${table.startTime}::time`,
+      sql`(${table.startTime} IS NULL AND ${table.endTime} IS NULL) OR (${table.startTime} IS NOT NULL AND ${table.endTime} IS NOT NULL AND ${table.endTime}::time > ${table.startTime}::time)`,
     ),
   ],
 );
