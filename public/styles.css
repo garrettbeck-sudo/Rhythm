@@ -276,6 +276,31 @@ a { color: inherit; }
   background: rgba(251, 252, 248, .78);
   box-shadow: 0 18px 60px rgba(59, 78, 57, .035);
 }
+.event-filters {
+  margin: 0 0 18px;
+  padding: 19px 22px;
+  border: 1px solid #e0e7dc;
+  border-radius: 16px;
+  background: rgba(251, 252, 248, .78);
+}
+.event-filters label { color: #768477; font-size: 10px; font-weight: 700; }
+.event-filter-search, .event-filter-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.event-filter-search { margin-bottom: 13px; }
+.event-filters input, .event-filters select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #dfe6dc;
+  border-radius: 9px;
+  color: #445447;
+  background: #fffefa;
+  font: inherit;
+  font-size: 11px;
+}
+.event-filters input:focus-visible, .event-filters select:focus-visible { outline: 3px solid rgba(99, 140, 106, .22); border-color: #96b099; }
+.event-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.event-filter-actions { display: flex; align-items: center; gap: 9px; margin-top: 15px; }
+.event-filter-actions .button { min-height: 38px; padding: 0 14px; font-size: 10px; }
 .event-list-heading { display: flex; justify-content: space-between; gap: 16px; padding: 0 3px 16px; color: #879489; font-size: 9px; font-weight: 700; letter-spacing: .13em; }
 .event-list-heading span:last-child { color: #a4afa4; font-weight: 500; letter-spacing: .04em; }
 .event-list { border-top: 1px solid #e8ede5; }
@@ -421,6 +446,7 @@ a { color: inherit; }
 }
 
 @media (max-width: 850px) {
+  .event-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-shell { grid-template-columns: minmax(300px, .82fr) 1.18fr; }
   .auth-story { padding-right: 34px; padding-left: 34px; }
   .story-kicker { max-width: 96px; text-align: right; line-height: 1.5; }
@@ -479,6 +505,9 @@ a { color: inherit; }
   .event-page-intro p { font-size: 12px; }
   .event-create-actions { width: 100%; flex-wrap: wrap; }
   .event-create-actions .button { min-height: 42px; }
+  .event-filters { padding: 16px 14px; border-radius: 14px; }
+  .event-filter-grid { gap: 10px; }
+  .event-filter-actions .button { min-height: 40px; }
   .event-list-panel { padding: 20px 17px 9px; border-radius: 15px; }
   .event-row { min-height: 78px; gap: 11px; }
   .event-row-title { font-size: 17px; }
