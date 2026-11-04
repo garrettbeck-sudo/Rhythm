@@ -2,65 +2,99 @@ Rhythm
 
 Rhythm is a weekly planner for building healthy habits around a busy schedule. You add your fixed commitments (classes, work shifts, other responsibilities), plan workouts, meals, and habits into the open time, check items off as you finish them, and log anything you did that you didn't plan.
 
-Live app: [TODO: paste your deployed Replit URL here]
+Live app: https://rhythm-garrettbeck1.replit.app/login
 
 What it does
-Accounts: sign up, log in, and log out. Each user sees only their own schedule.
+Accounts: sign up with email and password, log in, and log out. Each user sees only their own schedule.
 Plan your week: add events in six categories: Workout, Meal, Habit, Class, Work, and Responsibility.
 Check off planned items when you complete them.
 Log unplanned events, like a pickup game or a dinner out, so your week shows what really happened.
 Edit and delete any event. Deleting asks "Are you sure?" first.
-Star important events and see them on a Starred page.
-Search, filter, and sort by category, planned or unplanned, done or not done, title, notes, and date.
-Dashboard: a chart of completed versus planned items per week, plus this week's completion rate, workouts completed, and unplanned events logged.
-Weekly calendar view: a Mon–Sun grid with fixed commitments in gray and healthy items in color.
+Star important events and see them on the Starred page.
+Search, filter, and sort events by category, planned or unplanned, done or not done, title, notes, and date.
+Dashboard: a Chart.js chart of planned versus completed items per week (this week plus the 3 before it), plus this week's completion rate, workouts completed, and unplanned events logged.
+Weekly calendar view: a Monday–Sunday grid with fixed commitments in gray and healthy items in color. This is the home page after login.
 Recurring routines: set something once (e.g., "Tue 6am rower intervals") and it appears every week.
-Conflict warning: you get a warning if you plan something on top of a class or work block.
+Conflict warning: you get a warning if you plan a workout, meal, or habit on top of a class, work, or responsibility block.
 How to use it
 Sign up for an account.
 Add your classes and work shifts for the week.
-Add routines for things you do every week, like a training plan.
+Add Routines for things you do every week, like a training plan.
 Plan meals, workouts, and habits into your open time.
 Check items off as you finish them, and use Log unplanned for anything extra.
-Open the dashboard to see how closely your week matched your plan.
+Open the Dashboard to see how closely your week matched your plan.
+
+Main pages: /week (calendar), /events (list with search, filters, and sort), /starred, /routines, /dashboard.
+
 Tools used
 Tool	What it's for
-Replit Agent	AI coding agent that built the features from my prompts
-Replit Database [TODO: confirm, e.g., PostgreSQL]	Stores users, events, categories, routines, and stars
-Replit Auth [TODO: confirm]	Sign up and login
+Replit Agent	AI coding agent that built the features from my prompts (see prompts/)
+Node.js + Express	The web server and all pages
+PostgreSQL (Replit's built-in database)	Stores users, events, categories, routines, and stars
+Drizzle ORM	Defines the tables (db/schema.js) and runs database queries
+Email/password auth built into the app	Passwords are hashed with scrypt (Node's built-in crypto); logins use a signed, HTTP-only session cookie (auth.js)
+Chart.js	The dashboard chart
+Node's built-in test runner (node --test)	Automated tests
 Replit Deployments	Hosts the live app
-GitHub	Version control. Every change goes through a branch and a pull request.
-[TODO: chart/calendar libraries, e.g., Chart.js, FullCalendar]	Dashboard chart and weekly view
+GitHub	Version control. Every change goes through an Issue, a branch, and a pull request.
 Database
 
-Five tables: users, categories, events (the main item), routines, and stars (a junction table linking users to events they starred). See schema.md for every column and relationship.
+The main tables are users, categories, events (the main item), routines, and stars (a junction table linking users to the events they starred). There's also a routine_skips table that the agent added for recurring routines. See schema.md for every column and relationship.
 
 How to run it
-
 On Replit (easiest)
-
 Open the project on Replit, or import this repo at replit.com/import.
-Click Run.
+Make sure a PostgreSQL database is attached and a SESSION_SECRET secret (at least 32 characters) is set in Tools → Secrets.
+Click Run. The app starts on port 5000.
+Locally
 
-Locally [TODO: confirm these commands match your stack]
+You need Node.js and a PostgreSQL database.
 
 bash
-git clone https://github.com/[TODO: your-username]/rhythm.git
-cd rhythm
+git clone https://github.com/garrettbeck-sudo/Rhythm.git
+cd Rhythm
 npm install
-npm run dev
 
-Then open the local address shown in the terminal (often http://localhost:3000 or http://localhost:5000).
+Set these environment variables:
 
-If the app needs environment variables (for example, a database URL), copy them from Replit's Secrets tool into a .env file. Never commit that file.
+Variable	What it is
+DATABASE_URL	Your PostgreSQL connection string
+SESSION_SECRET	Any random string of at least 32 characters, used to sign login cookies
+PORT	Optional. Defaults to 5000
+
+Then create the tables, add the 6 categories, and start the app:
+
+bash
+npm run db:push
+npm run db:seed
+npm start
+
+Open http://localhost:5000.
+
+Never commit secrets or a .env file to GitHub.
 
 Running the tests
+bash
+npm test
 
-[TODO: replace with the command your agent set up, e.g., npm test]
+The data-isolation and auth tests use the database, so DATABASE_URL and SESSION_SECRET must be set.
 
-Data isolation: User B can't see User A's events.
-Dashboard: with 4 planned items, 3 checked off, and 1 unplanned event, the completion rate shows 75%.
-Project docs
-PLAN.md: the original plan and the Plan vs. Reality comparison
-schema.md: database tables and relationships
-prompts/: the key prompts used to build each feature
+The two required tests:
+
+Data isolation (test/data-isolation.test.js): creates User A with a "6 mi tempo run" on Thursday, logs in as User B, and checks that User B sees no events.
+Dashboard (dashboard/metrics.test.js): with 4 planned events this week, 3 completed, plus 1 unplanned event, the completion rate is 75%. Unplanned events don't count toward the rate.
+
+There are also tests for the calendar layout, routine generation, event handling, and page rendering.
+
+Project structure
+Path	What's in it
+server.js	Express app: routes and page handlers
+auth.js	Password hashing and session cookies
+db/	Database connection, table definitions, and category seed
+calendar/	Weekly view logic
+routines/	Recurring routine generation
+dashboard/	Dashboard calculations
+views/	HTML page templates
+public/	Browser JavaScript and CSS
+test/	Auth and data-isolation tests
+prompts/	Prompt log for each feature
