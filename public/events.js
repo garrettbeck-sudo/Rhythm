@@ -90,6 +90,7 @@
   }, true);
 
   form.addEventListener("submit", (event) => {
+    if (event.submitter?.name === "conflictAction" && event.submitter.value === "back") return;
     validationAttempted = true;
     const errors = collectErrors();
     showErrors(errors);

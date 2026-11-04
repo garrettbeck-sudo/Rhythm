@@ -597,7 +597,17 @@ function renderRoutineDeleteConfirmationPage({ routine = {}, email, csrfToken })
   return shell({ title: "Delete routine", bodyClass: "page-events", content });
 }
 
-function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
+function renderEventFormPage({
+  mode,
+  event = {},
+  categories = [],
+  email,
+  csrfToken,
+  error,
+  errors = {},
+  conflicts = [],
+  conflictListChanged = false,
+}) {
   const isEdit = mode === "edit";
   const isUnplanned = mode === "unplanned";
   const isUnplannedEvent = isUnplanned || (isEdit && event.planned === false);
@@ -617,6 +627,24 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
     return `<option value="${safe(category.id)}" data-category-name="${safe(category.name)}"${selected}>${safe(category.name)}${category.isFixed ? " · fixed commitment" : ""}</option>`;
   }).join("");
   const selectedCategoryName = categories.find((category) => String(category.id) === String(event.categoryId))?.name || event.categoryName || "";
+  const conflictWarning = conflicts.length
+    ? `<section class="conflict-warning" role="alert" aria-labelledby="conflict-warning-title">
+        <h3 id="conflict-warning-title">This time overlaps with ${conflicts.length === 1 ? "another event" : "other events"}.</h3>
+        <p>Saving anyway will remove the conflicting event${conflicts.length === 1 ? "" : "s"} listed here, then save your event.</p>
+        ${conflictListChanged ? "<p>The conflicts changed. Review this updated list before continuing.</p>" : ""}
+        <ul>${conflicts.map((conflict) => `<li><strong>${safe(conflict.title || "Untitled event")}</strong><span>${formatEventTimeRange(conflict.startTime, conflict.endTime)}</span></li>`).join("")}</ul>
+      </section>
+      <input type="hidden" name="confirmedConflictIds" value="${safe(conflicts.map((conflict) => conflict.id).join(","))}">`
+    : "";
+  const formActions = conflicts.length
+    ? `<div class="event-form-actions conflict-warning-actions">
+        <button class="button button-secondary" type="submit" name="conflictAction" value="back" formnovalidate>Go back</button>
+        <button class="button button-primary" type="submit" name="conflictAction" value="save">Save anyway <span aria-hidden="true">↗</span></button>
+      </div>`
+    : `<div class="event-form-actions">
+        <a class="button button-secondary" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">Cancel</a>
+        <button class="button button-primary" type="submit">${isEdit ? "Save changes" : isUnplanned ? "Save unplanned event" : "Add event"} <span aria-hidden="true">↗</span></button>
+      </div>`;
   const content = `<main class="week-shell event-shell">
     ${eventHeader({ email, csrfToken })}
     <section class="event-form-layout">
@@ -632,6 +660,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
         ${error ? `<div class="message message-error" role="alert">${safe(error)}</div>` : ""}
         <form class="event-form" method="post" action="${action}" data-event-form>
           <input type="hidden" name="_csrf" value="${safe(csrfToken)}">
+          ${conflictWarning}
           <label for="event-title">Event title</label>
           <input id="event-title" name="title" type="text" maxlength="180" placeholder="e.g. Morning swim" value="${safe(event.title)}" required${describedBy("title")}>
           ${fieldError("title")}
@@ -663,10 +692,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
 
           <label for="event-notes">Notes <span class="field-unit">optional</span></label>
           <textarea id="event-notes" name="notes" rows="4" maxlength="2000" placeholder="Anything you want to remember about this plan">${safe(event.notes)}</textarea>
-          <div class="event-form-actions">
-            <a class="button button-secondary" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">Cancel</a>
-            <button class="button button-primary" type="submit">${isEdit ? "Save changes" : isUnplanned ? "Save unplanned event" : "Add event"} <span aria-hidden="true">↗</span></button>
-          </div>
+          ${formActions}
         </form>
       </section>
     </section>
@@ -676,7 +702,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
     title: isEdit ? "Edit event" : isUnplanned ? "Log unplanned event" : "New event",
     bodyClass: "page-events",
     content,
-    scripts: ["/assets/events.js?v=2"],
+    scripts: ["/assets/events.js?v=3"],
   });
 }
 

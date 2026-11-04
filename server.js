@@ -1,9 +1,23 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
-const { and, asc, desc, eq, gte, ilike, lte, or } = require("drizzle-orm");
+const {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lt,
+  lte,
+  ne,
+  or,
+} = require("drizzle-orm");
 const { db, pool } = require("./db");
-const { categories, events, routines, stars, users } = require("./db/schema");
+const { categories, events, routineSkips, routines, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
 const { getCalendarWeekRange, isValidDateOnly } = require("./calendar/week");
 const {
@@ -299,7 +313,16 @@ function parseEventForm(form, availableCategories) {
   };
 }
 
-async function sendEventForm(req, res, { mode, event, error, errors, status = 200, categories: availableCategories }) {
+async function sendEventForm(req, res, {
+  mode,
+  event,
+  error,
+  errors,
+  conflicts,
+  conflictListChanged,
+  status = 200,
+  categories: availableCategories,
+}) {
   const eventCategories = availableCategories || await getEventCategories();
   const csrfToken = issueCsrfToken(res);
   return res.status(status).type("html").send(
@@ -311,6 +334,8 @@ async function sendEventForm(req, res, { mode, event, error, errors, status = 20
       csrfToken,
       error,
       errors,
+      conflicts,
+      conflictListChanged,
     }),
   );
 }
@@ -319,6 +344,125 @@ function sendEventNotFound(res) {
   return res.status(404).type("html").send(
     "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Event not found · Rhythm</title><body><h1>Event not found</h1><a href=\"/events\">Return to your events</a></body></html>",
   );
+}
+
+function parseConfirmedConflictIds(value) {
+  if (typeof value !== "string" || !value) return [];
+  return [...new Set(value.split(",").map(parsePositiveId).filter(Boolean))];
+}
+
+async function findOverlappingEvents(queryable, userId, values, excludeEventId) {
+  if (!values.startTime || !values.endTime) return [];
+  const conditions = [
+    eq(events.userId, userId),
+    eq(events.date, values.date),
+    isNotNull(events.startTime),
+    isNotNull(events.endTime),
+    lt(events.startTime, values.endTime),
+    gt(events.endTime, values.startTime),
+  ];
+  if (excludeEventId) conditions.push(ne(events.id, excludeEventId));
+
+  return queryable
+    .select({
+      id: events.id,
+      title: events.title,
+      startTime: events.startTime,
+      endTime: events.endTime,
+      routineId: events.routineId,
+    })
+    .from(events)
+    .where(and(...conditions))
+    .orderBy(asc(events.startTime), asc(events.id))
+    .for("update");
+}
+
+async function saveEventWithConflictResolution({
+  userId,
+  values,
+  eventId,
+  planned,
+  conflictAction,
+  confirmedConflictIds,
+}) {
+  return db.transaction(async (tx) => {
+    if (eventId) {
+      const [ownedEvent] = await tx
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.id, eventId), eq(events.userId, userId)))
+        .for("update")
+        .limit(1);
+      if (!ownedEvent) return { notFound: true };
+    }
+
+    const conflicts = await findOverlappingEvents(tx, userId, values, eventId);
+    if (conflicts.length && conflictAction !== "save") return { conflicts };
+
+    if (conflictAction === "save" && conflicts.length) {
+      const confirmedIds = new Set(confirmedConflictIds);
+      if (conflicts.some((conflict) => !confirmedIds.has(conflict.id))) {
+        return { conflicts, conflictListChanged: true };
+      }
+
+      const conflictIds = conflicts.map((conflict) => conflict.id);
+      const routineIds = [...new Set(
+        conflicts.map((conflict) => conflict.routineId).filter(Number.isInteger),
+      )];
+      if (routineIds.length) {
+        const ownedRoutines = await tx
+          .select({ id: routines.id })
+          .from(routines)
+          .where(and(
+            eq(routines.userId, userId),
+            inArray(routines.id, routineIds),
+          ));
+        if (ownedRoutines.length) {
+          await tx
+            .insert(routineSkips)
+            .values(ownedRoutines.map((routine) => ({
+              userId,
+              routineId: routine.id,
+              date: values.date,
+            })))
+            .onConflictDoNothing();
+        }
+      }
+
+      await tx
+        .delete(stars)
+        .where(and(
+          eq(stars.userId, userId),
+          inArray(stars.eventId, conflictIds),
+        ));
+      await tx
+        .delete(events)
+        .where(and(
+          eq(events.userId, userId),
+          inArray(events.id, conflictIds),
+        ));
+    }
+
+    if (eventId) {
+      const [updated] = await tx
+        .update(events)
+        .set(values)
+        .where(and(eq(events.id, eventId), eq(events.userId, userId)))
+        .returning({ id: events.id });
+      return updated ? { savedId: updated.id } : { notFound: true };
+    }
+
+    const [created] = await tx
+      .insert(events)
+      .values({
+        ...values,
+        userId,
+        planned,
+        completed: !planned,
+      })
+      .returning({ id: events.id });
+    return { savedId: created.id };
+  });
 }
 
 function isEventConstraintError(error) {
@@ -448,7 +592,23 @@ async function generateRoutineEventsForWeek(userId, range) {
     })
     .from(routines)
     .where(and(eq(routines.userId, userId), eq(routines.active, true)));
-  const generatedEvents = buildRoutineEventValues(userId, activeRoutines, range.days);
+  const skippedRoutineDates = await db
+    .select({
+      routineId: routineSkips.routineId,
+      date: routineSkips.date,
+    })
+    .from(routineSkips)
+    .where(and(
+      eq(routineSkips.userId, userId),
+      gte(routineSkips.date, range.weekStart),
+      lte(routineSkips.date, range.weekEnd),
+    ));
+  const generatedEvents = buildRoutineEventValues(
+    userId,
+    activeRoutines,
+    range.days,
+    skippedRoutineDates,
+  );
 
   if (generatedEvents.length) {
     await db.insert(events).values(generatedEvents).onConflictDoNothing();
@@ -921,6 +1081,7 @@ app.get("/events/new/unplanned", async (req, res, next) => {
 async function handleEventCreation(req, res, next, { planned }) {
   const form = eventFormValues(req.body);
   const mode = planned ? "create" : "unplanned";
+  const conflictAction = req.body.conflictAction;
   try {
     const availableCategories = await getEventCategories();
     if (!csrfMatches(req)) {
@@ -929,6 +1090,13 @@ async function handleEventCreation(req, res, next, { planned }) {
         event: form,
         error: "This form expired. Refresh and try again.",
         status: 403,
+        categories: availableCategories,
+      });
+    }
+    if (conflictAction === "back") {
+      return await sendEventForm(req, res, {
+        mode,
+        event: form,
         categories: availableCategories,
       });
     }
@@ -953,16 +1121,23 @@ async function handleEventCreation(req, res, next, { planned }) {
       });
     }
 
-    const [created] = await db
-      .insert(events)
-      .values({
-        ...parsed.values,
-        userId: req.currentUser.id,
-        planned,
-        completed: !planned,
-      })
-      .returning({ id: events.id });
-    return res.redirect(303, `/events/${created.id}`);
+    const result = await saveEventWithConflictResolution({
+      userId: req.currentUser.id,
+      values: parsed.values,
+      planned,
+      conflictAction: conflictAction === "save" ? "save" : null,
+      confirmedConflictIds: parseConfirmedConflictIds(req.body.confirmedConflictIds),
+    });
+    if (result.conflicts) {
+      return await sendEventForm(req, res, {
+        mode,
+        event: form,
+        conflicts: result.conflicts,
+        conflictListChanged: result.conflictListChanged,
+        categories: availableCategories,
+      });
+    }
+    return res.redirect(303, `/events/${result.savedId}`);
   } catch (error) {
     if (isEventConstraintError(error)) {
       return sendEventForm(req, res, {
@@ -1001,6 +1176,7 @@ app.post("/events/:id/edit", async (req, res, next) => {
     if (!existing) return sendEventNotFound(res);
     const availableCategories = await getEventCategories();
     const form = eventFormValues(req.body, existing);
+    const conflictAction = req.body.conflictAction;
 
     if (!csrfMatches(req)) {
       return await sendEventForm(req, res, {
@@ -1008,6 +1184,13 @@ app.post("/events/:id/edit", async (req, res, next) => {
         event: form,
         error: "This form expired. Refresh and try again.",
         status: 403,
+        categories: availableCategories,
+      });
+    }
+    if (conflictAction === "back") {
+      return await sendEventForm(req, res, {
+        mode: "edit",
+        event: form,
         categories: availableCategories,
       });
     }
@@ -1033,12 +1216,23 @@ app.post("/events/:id/edit", async (req, res, next) => {
     }
 
     try {
-      const [updated] = await db
-        .update(events)
-        .set(parsed.values)
-        .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
-        .returning({ id: events.id });
-      if (!updated) return sendEventNotFound(res);
+      const result = await saveEventWithConflictResolution({
+        userId: req.currentUser.id,
+        values: parsed.values,
+        eventId,
+        conflictAction: conflictAction === "save" ? "save" : null,
+        confirmedConflictIds: parseConfirmedConflictIds(req.body.confirmedConflictIds),
+      });
+      if (result.notFound) return sendEventNotFound(res);
+      if (result.conflicts) {
+        return await sendEventForm(req, res, {
+          mode: "edit",
+          event: form,
+          conflicts: result.conflicts,
+          conflictListChanged: result.conflictListChanged,
+          categories: availableCategories,
+        });
+      }
       return res.redirect(303, `/events/${eventId}`);
     } catch (error) {
       if (isEventConstraintError(error)) {
