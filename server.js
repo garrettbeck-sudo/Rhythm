@@ -1,12 +1,18 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
-const { and, asc, desc, eq, ilike, or } = require("drizzle-orm");
+const { and, asc, desc, eq, gte, ilike, lte, or } = require("drizzle-orm");
 const { db, pool } = require("./db");
 const { categories, events, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
 const {
+  buildWeeklyChartData,
+  calculateCurrentWeekStats,
+  getDashboardDateRanges,
+} = require("./dashboard/metrics");
+const {
   renderAuthPage,
+  renderDashboardPage,
   renderWeekPage,
   renderEventListPage,
   renderEventFormPage,
@@ -39,6 +45,13 @@ app.use(express.urlencoded({ extended: false, limit: "8kb" }));
 app.use(
   "/assets",
   express.static(path.join(__dirname, "public"), {
+    index: false,
+    maxAge: "1h",
+  }),
+);
+app.use(
+  "/vendor/chart.js",
+  express.static(path.join(__dirname, "node_modules/chart.js/dist"), {
     index: false,
     maxAge: "1h",
   }),
@@ -384,6 +397,43 @@ app.get("/", (req, res) => res.redirect(303, "/week"));
 app.get("/week", (req, res) => {
   const csrfToken = issueCsrfToken(res);
   res.type("html").send(renderWeekPage({ email: req.currentUser.email, csrfToken }));
+});
+
+app.get("/dashboard", async (req, res, next) => {
+  try {
+    const ranges = getDashboardDateRanges();
+    const [eventRows, eventCategories] = await Promise.all([
+      db
+        .select({
+          categoryId: events.categoryId,
+          categoryName: categories.name,
+          date: events.date,
+          planned: events.planned,
+          completed: events.completed,
+        })
+        .from(events)
+        .innerJoin(categories, eq(events.categoryId, categories.id))
+        .where(and(
+          eq(events.userId, req.currentUser.id),
+          gte(events.date, ranges.chartStart),
+          lte(events.date, ranges.currentWeekEnd),
+        ))
+        .orderBy(asc(events.date), asc(events.id)),
+      getEventCategories(),
+    ]);
+    const stats = calculateCurrentWeekStats(eventRows, ranges);
+    const chartData = buildWeeklyChartData(eventRows, eventCategories, ranges.weeks);
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(renderDashboardPage({
+      email: req.currentUser.email,
+      csrfToken,
+      stats,
+      chartData,
+      currentWeekLabel: ranges.weeks[ranges.weeks.length - 1].label,
+    }));
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.get("/events", async (req, res, next) => {
