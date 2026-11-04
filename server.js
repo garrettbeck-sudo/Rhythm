@@ -149,6 +149,8 @@ const joinedEventSelection = {
   notes: events.notes,
   distanceMi: events.distanceMi,
   proteinG: events.proteinG,
+  planned: events.planned,
+  completed: events.completed,
 };
 
 async function getEventCategories() {
@@ -559,6 +561,33 @@ app.get("/events/:id", async (req, res, next) => {
     return res.type("html").send(
       renderEventDetailPage({ event, email: req.currentUser.email, csrfToken }),
     );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/events/:id/completed", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return res.status(404).json({ error: "Event not found." });
+  if (!csrfMatches(req)) return res.status(403).json({ error: "This request expired. Refresh and try again." });
+
+  const completedValue = req.body?.completed;
+  if (completedValue !== "true" && completedValue !== "false") {
+    return res.status(400).json({ error: "Choose a valid completion state." });
+  }
+
+  try {
+    const [updated] = await db
+      .update(events)
+      .set({ completed: completedValue === "true" })
+      .where(and(
+        eq(events.id, eventId),
+        eq(events.userId, req.currentUser.id),
+        eq(events.planned, true),
+      ))
+      .returning({ completed: events.completed });
+    if (!updated) return res.status(404).json({ error: "Event not found." });
+    return res.json({ completed: updated.completed });
   } catch (error) {
     return next(error);
   }

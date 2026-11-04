@@ -193,20 +193,39 @@ function safeCategoryColor(value) {
   return /^#[0-9a-f]{3,8}$/i.test(color) ? color : "#638c6a";
 }
 
+function renderCompletionControl(event, csrfToken, withLabel = false) {
+  const labelText = withLabel ? "<span class=\"event-completion-label\">Completed</span>" : "";
+  if (!event.planned) {
+    return event.completed
+      ? `<span class="event-completion-control event-completion-static" aria-label="Completed"><span class="event-completion-mark" aria-hidden="true">✓</span>${labelText}</span>`
+      : "";
+  }
+
+  const title = String(event.title ?? "event");
+  const actionLabel = event.completed ? `Mark ${title} as not complete` : `Mark ${title} as complete`;
+  return `<label class="event-completion-control">
+    <input class="event-completion-input" type="checkbox" data-event-checkbox data-event-id="${escapeHtml(event.id)}" data-csrf-token="${escapeHtml(csrfToken)}" aria-label="${escapeHtml(actionLabel)}"${event.completed ? " checked" : ""}>
+    <span class="event-completion-mark" aria-hidden="true">✓</span>${labelText}
+  </label>`;
+}
+
 function renderEventListPage({ events = [], email, csrfToken, notice }) {
   const sortedEvents = [...events].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
   const rows = sortedEvents.length
     ? `<div class="event-list" role="list">${sortedEvents.map((event) => {
       const color = safeCategoryColor(event.categoryColor);
-      return `<a class="event-row" role="listitem" href="/events/${encodeURIComponent(event.id)}">
+      const completedClass = event.completed ? " event-completed" : "";
+      return `<div class="event-row${completedClass}" role="listitem" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+        ${renderCompletionControl(event, csrfToken)}
         <span class="event-color-mark" style="--event-color:${color}" aria-hidden="true"></span>
-        <span class="event-row-main">
+        <a class="event-row-main" href="/events/${encodeURIComponent(event.id)}">
           <span class="event-row-title">${escapeHtml(event.title)}</span>
           <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
-        </span>
+        </a>
         <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
-        <span class="event-row-arrow" aria-hidden="true">↗</span>
-      </a>`;
+        <a class="event-row-arrow" href="/events/${encodeURIComponent(event.id)}" aria-label="Open ${escapeHtml(event.title)}">↗</a>
+        <span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span>
+      </div>`;
     }).join("")}</div>`
     : `<div class="event-empty">
         <span class="event-empty-mark" aria-hidden="true"></span>
@@ -232,7 +251,7 @@ function renderEventListPage({ events = [], email, csrfToken, notice }) {
     </section>
     <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: "Your events", bodyClass: "page-events", content });
+  return shell({ title: "Your events", bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
 }
 
 function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
@@ -313,6 +332,8 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
 
 function renderEventDetailPage({ event = {}, email, csrfToken }) {
   const color = safeCategoryColor(event.categoryColor);
+  const completedClass = event.completed ? " event-completed" : "";
+  const completionControl = renderCompletionControl(event, csrfToken, true);
   const optionalDetails = [
     event.distanceMi != null && event.distanceMi !== "" ? `<div class="detail-extra"><span>Distance</span><strong>${escapeHtml(event.distanceMi)} mi</strong></div>` : "",
     event.proteinG != null && event.proteinG !== "" ? `<div class="detail-extra"><span>Protein</span><strong>${escapeHtml(event.proteinG)} g</strong></div>` : "",
@@ -321,9 +342,10 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     ${eventHeader({ email, csrfToken })}
     <section class="event-detail-wrap">
       <a class="back-link" href="/events">← All events</a>
-      <article class="event-detail-card">
+      <article class="event-detail-card${completedClass}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
         <div class="event-detail-top"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span><span class="event-detail-id">PLAN ${escapeHtml(event.id)}</span></div>
         <h1>${escapeHtml(event.title)}<span class="title-period">.</span></h1>
+        ${completionControl ? `<div class="event-detail-completion">${completionControl}<span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span></div>` : ""}
         <div class="event-detail-schedule">
           <div class="schedule-icon" aria-hidden="true"></div>
           <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span></div>
@@ -339,7 +361,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     </section>
     <footer class="week-footer"><span>Rhythm is here for the whole you.</span><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: event.title || "Event details", bodyClass: "page-events", content });
+  return shell({ title: event.title || "Event details", bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
 }
 
 function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {

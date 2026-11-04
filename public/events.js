@@ -110,3 +110,62 @@
 
   updateCategoryFields();
 })();
+
+(() => {
+  const checkboxes = document.querySelectorAll("[data-event-checkbox]");
+
+  for (const checkbox of checkboxes) {
+    const eventItem = checkbox.closest("[data-event-item]");
+    const status = eventItem?.querySelector("[data-event-toggle-status]");
+    const title = eventItem?.dataset.eventTitle || "event";
+    let savedState = checkbox.checked;
+
+    function applyCompletionState(completed) {
+      if (eventItem) {
+        eventItem.classList.toggle("event-completed", completed);
+        eventItem.dataset.completed = String(completed);
+      }
+      checkbox.setAttribute(
+        "aria-label",
+        completed ? `Mark ${title} as not complete` : `Mark ${title} as complete`,
+      );
+    }
+
+    checkbox.addEventListener("change", async () => {
+      const requestedState = checkbox.checked;
+      checkbox.disabled = true;
+      if (status) status.textContent = "";
+      applyCompletionState(requestedState);
+
+      try {
+        const response = await fetch(`/events/${encodeURIComponent(checkbox.dataset.eventId)}/completed`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            _csrf: checkbox.dataset.csrfToken,
+            completed: String(requestedState),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || typeof result.completed !== "boolean") {
+          throw new Error(result.error || "Could not save this change.");
+        }
+
+        savedState = result.completed;
+        checkbox.checked = savedState;
+        applyCompletionState(savedState);
+        if (status) status.textContent = savedState ? "Marked complete." : "Marked incomplete.";
+      } catch {
+        checkbox.checked = savedState;
+        applyCompletionState(savedState);
+        if (status) status.textContent = "Couldn't save this change. Try again.";
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+  }
+})();
