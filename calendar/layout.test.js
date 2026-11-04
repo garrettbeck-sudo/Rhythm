@@ -9,8 +9,8 @@ test("calendar events map their start and duration to minute-based positions", (
   ]);
 
   assert.deepEqual(layout.map(({ top, height, left, width }) => ({ top, height, left, width })), [
-    { top: 360, height: 60, left: 0, width: 100 },
-    { top: 570, height: 45, left: 0, width: 100 },
+    { top: 60, height: 60, left: 0, width: 100 },
+    { top: 270, height: 45, left: 0, width: 100 },
   ]);
 });
 
@@ -22,9 +22,9 @@ test("overlapping events get separate horizontal lanes instead of covering each 
   ]);
 
   assert.deepEqual(layout.map(({ top, left, width }) => ({ top, left, width })), [
-    { top: 480, left: 0, width: 50 },
-    { top: 510, left: 50, width: 50 },
-    { top: 600, left: 0, width: 100 },
+    { top: 180, left: 0, width: 50 },
+    { top: 210, left: 50, width: 50 },
+    { top: 300, left: 0, width: 100 },
   ]);
 });
 
@@ -32,4 +32,20 @@ test("calendar time parsing maps midnight and noon to the correct hour positions
   assert.equal(timeToMinutes("00:00"), 0);
   assert.equal(timeToMinutes("12:00"), 720);
   assert.equal(timeToMinutes("23:59"), 1439);
+});
+
+test("the calendar day starts at 5 AM and places overnight times near the bottom", () => {
+  const layout = layoutCalendarEvents([
+    { id: 1, startTime: "05:00", endTime: "06:00" },
+    { id: 2, startTime: "06:30", endTime: "07:00" },
+    { id: 3, startTime: "01:00", endTime: "01:30" },
+    { id: 4, startTime: "04:00", endTime: "04:30" },
+  ]);
+
+  assert.deepEqual(layout.map(({ event, top }) => [event.id, top]), [
+    [1, 0],
+    [2, 90],
+    [3, 1200],
+    [4, 1380],
+  ]);
 });

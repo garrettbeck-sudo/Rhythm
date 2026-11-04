@@ -142,8 +142,9 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
   const dayHeaders = range.days.map((day) => `<div class="calendar-day-header${day.isToday ? " calendar-today" : ""}" role="columnheader">
     <span>${escapeHtml(day.dayName)}</span><strong>${day.dayNumber}</strong>
   </div>`).join("");
-  const timeLabels = Array.from({ length: 24 }, (_, hour) => `<span class="calendar-hour-label">${formatCalendarHour(hour)}</span>`).join("") +
-    '<span class="calendar-hour-label calendar-midnight-end">12 AM</span>';
+  const calendarHours = Array.from({ length: 24 }, (_, index) => (index + 5) % 24);
+  const timeLabels = calendarHours.map((hour) => `<span class="calendar-hour-label">${formatCalendarHour(hour)}</span>`).join("") +
+    `<span class="calendar-hour-label calendar-midnight-end">${formatCalendarHour(5)}</span>`;
   const dayColumns = range.days.map((day) => `<section class="calendar-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} ${day.date}">
     ${layoutCalendarEvents(eventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
   </section>`).join("");
