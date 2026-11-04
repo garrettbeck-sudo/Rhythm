@@ -1,4 +1,5 @@
 const { layoutCalendarEvents, timeToMinutes } = require("../calendar/layout");
+const { isQuarterHourTime } = require("../form-validation");
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -110,6 +111,27 @@ function formatCalendarTime(value) {
   const period = hour < 12 ? "AM" : "PM";
   const displayHour = hour % 12 || 12;
   return `${displayHour}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+function timeOptions(value) {
+  const selectedValue = String(value ?? "");
+  const options = ['<option value="">No time</option>'];
+  if (selectedValue && !isQuarterHourTime(selectedValue)) {
+    const label = /^([01]\d|2[0-3]):([0-5]\d)$/.test(selectedValue)
+      ? formatCalendarTime(selectedValue)
+      : selectedValue;
+    options.push(`<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(label)} (old time)</option>`);
+  }
+
+  for (let totalMinutes = 0; totalMinutes < 24 * 60; totalMinutes += 15) {
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+    const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    const selected = selectedValue === time ? " selected" : "";
+    options.push(`<option value="${time}"${selected}>${formatCalendarTime(time)}</option>`);
+  }
+
+  return options.join("");
 }
 
 function isUntimedEvent(event) {
@@ -544,8 +566,8 @@ function renderRoutineFormPage({ mode, routine = {}, categories = [], email, csr
           ${fieldError("dayOfWeek")}
 
           <div class="event-time-fields">
-            <div><label for="routine-start">Starts</label><input id="routine-start" name="startTime" type="time" value="${safe(routine.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
-            <div><label for="routine-end">Ends</label><input id="routine-end" name="endTime" type="time" value="${safe(routine.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
+            <div><label for="routine-start">Starts</label><select id="routine-start" name="startTime"${describedBy("startTime")}>${timeOptions(routine.startTime)}</select>${fieldError("startTime")}</div>
+            <div><label for="routine-end">Ends</label><select id="routine-end" name="endTime"${describedBy("endTime")}>${timeOptions(routine.endTime)}</select>${fieldError("endTime")}</div>
           </div>
           <p class="routine-time-hint">Leave both blank to create a routine without a scheduled time.</p>
 
@@ -676,8 +698,8 @@ function renderEventFormPage({
           ${fieldError("date")}
 
           <div class="event-time-fields">
-            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
-            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
+            <div><label for="event-start">Starts</label><select id="event-start" name="startTime"${describedBy("startTime")}>${timeOptions(event.startTime)}</select>${fieldError("startTime")}</div>
+            <div><label for="event-end">Ends</label><select id="event-end" name="endTime"${describedBy("endTime")}>${timeOptions(event.endTime)}</select>${fieldError("endTime")}</div>
           </div>
           <p class="event-time-hint">Leave both blank to place this event in the Any Time row.</p>
 
