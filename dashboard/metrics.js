@@ -111,14 +111,13 @@ function calculateCurrentWeekStats(events, ranges) {
   );
   const plannedEvents = currentWeekEvents.filter((event) => event.planned === true);
   const plannedCompleted = plannedEvents.filter((event) => event.completed === true);
-  const completedEvents = currentWeekEvents.filter((event) => event.completed === true);
   const workoutsCompleted = currentWeekEvents.filter((event) =>
     event.categoryName === "Workout" && event.completed === true
   ).length;
   const unplannedEventsLogged = currentWeekEvents.filter((event) => event.planned === false).length;
 
   return {
-    completionRate: currentWeekEvents.length === 0 ? 0 : Math.round((completedEvents.length / currentWeekEvents.length) * 100),
+    completionRate: plannedEvents.length === 0 ? 0 : Math.round((plannedCompleted.length / plannedEvents.length) * 100),
     plannedCompleted: plannedCompleted.length,
     plannedTotal: plannedEvents.length,
     workoutsCompleted,
