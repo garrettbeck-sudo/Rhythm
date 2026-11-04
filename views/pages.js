@@ -1,3 +1,5 @@
+const { layoutCalendarEvents, timeToMinutes } = require("../calendar/layout");
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -101,11 +103,6 @@ function renderAuthPage({ mode, error, notice, csrfToken }) {
   });
 }
 
-function timeToMinutes(value) {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)/.exec(String(value ?? ""));
-  return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
-}
-
 function formatCalendarTime(value) {
   const minutes = timeToMinutes(value);
   const hour = Math.floor(minutes / 60);
@@ -115,52 +112,6 @@ function formatCalendarTime(value) {
   return `${displayHour}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
-function layoutCalendarEvents(events) {
-  const sorted = events
-    .map((event) => ({
-      event,
-      start: timeToMinutes(event.startTime),
-      end: Math.max(timeToMinutes(event.endTime), timeToMinutes(event.startTime) + 30),
-    }))
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-  const positioned = [];
-  let cluster = [];
-  let clusterEnd = -1;
-
-  function finishCluster() {
-    if (!cluster.length) return;
-    const laneEnds = [];
-    for (const item of cluster) {
-      let lane = laneEnds.findIndex((end) => end <= item.start);
-      if (lane === -1) lane = laneEnds.length;
-      laneEnds[lane] = item.end;
-      item.lane = lane;
-    }
-    const laneCount = laneEnds.length;
-    for (const item of cluster) {
-      const top = item.start;
-      const height = Math.min(1440 - top, Math.max(30, item.end - item.start));
-      positioned.push({
-        event: item.event,
-        top,
-        height,
-        left: (item.lane / laneCount) * 100,
-        width: 100 / laneCount,
-      });
-    }
-    cluster = [];
-    clusterEnd = -1;
-  }
-
-  for (const item of sorted) {
-    if (cluster.length && item.start >= clusterEnd) finishCluster();
-    cluster.push(item);
-    clusterEnd = Math.max(clusterEnd, item.end);
-  }
-  finishCluster();
-  return positioned;
-}
-
 function renderCalendarEvent(item, csrfToken) {
   const { event } = item;
   const color = safeCategoryColor(event.categoryColor);
@@ -168,8 +119,7 @@ function renderCalendarEvent(item, csrfToken) {
   const completionControl = isHealthyPlannedItem ? renderCompletionControl(event, csrfToken) : "";
   const completedClass = event.completed ? " event-completed" : "";
   const unplannedClass = event.planned === false ? " calendar-event-unplanned" : "";
-  const style = `--event-color:${color};top:${item.top}px;height:${item.height}px;left:${item.left}%;width:${item.width}%;`;
-  return `<article class="calendar-event${completedClass}${unplannedClass}" style="${style}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+  return `<article class="calendar-event${completedClass}${unplannedClass}" data-calendar-event data-calendar-top="${item.top}" data-calendar-height="${item.height}" data-calendar-left="${item.left}" data-calendar-width="${item.width}" data-calendar-color="${escapeHtml(color)}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
     <a class="calendar-event-link" href="/events/${encodeURIComponent(event.id)}" title="${escapeHtml(event.title)}">
       <span class="calendar-event-time">${formatCalendarTime(event.startTime)}–${formatCalendarTime(event.endTime)}</span>
       <span class="calendar-event-title">${escapeHtml(event.title)}</span>
@@ -192,7 +142,8 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
   const dayHeaders = range.days.map((day) => `<div class="calendar-day-header${day.isToday ? " calendar-today" : ""}" role="columnheader">
     <span>${escapeHtml(day.dayName)}</span><strong>${day.dayNumber}</strong>
   </div>`).join("");
-  const timeLabels = Array.from({ length: 24 }, (_, hour) => `<span class="calendar-hour-label" style="top:${hour * 60 + 4}px">${formatCalendarHour(hour)}</span>`).join("");
+  const timeLabels = Array.from({ length: 24 }, (_, hour) => `<span class="calendar-hour-label">${formatCalendarHour(hour)}</span>`).join("") +
+    '<span class="calendar-hour-label calendar-midnight-end">12 AM</span>';
   const dayColumns = range.days.map((day) => `<section class="calendar-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} ${day.date}">
     ${layoutCalendarEvents(eventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
   </section>`).join("");
@@ -231,7 +182,7 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
     title: "My Week",
     bodyClass: "page-events page-calendar",
     content,
-    scripts: ["/assets/events.js"],
+    scripts: ["/assets/events.js", "/assets/calendar.js"],
   });
 }
 

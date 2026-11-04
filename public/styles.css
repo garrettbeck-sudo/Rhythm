@@ -254,12 +254,15 @@ a { color: inherit; }
 .calendar-day-header strong { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 50%; color: #56675a; font-size: 12px; font-weight: 600; }
 .calendar-day-header.calendar-today strong { color: #fff; background: var(--green-dark); }
 .calendar-grid-body { display: grid; grid-template-columns: 66px minmax(0, 1fr); }
-.calendar-time-axis { position: relative; height: 1440px; background: #f9fbf6; }
-.calendar-hour-label { position: absolute; right: 8px; transform: translateY(-50%); color: #929e93; font-size: 9px; white-space: nowrap; }
+.calendar-time-axis { position: relative; display: grid; height: 1452px; grid-template-rows: repeat(24, 60px) 12px; background: #f9fbf6; }
+.calendar-hour-label { align-self: start; justify-self: end; transform: translateY(-50%); color: #929e93; font-size: 9px; white-space: nowrap; }
+.calendar-hour-label:first-child { transform: none; }
+.calendar-midnight-end { color: #6f7e72; font-weight: 650; }
 .calendar-day-columns { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); height: 1440px; }
 .calendar-day-column { position: relative; height: 1440px; border-left: 1px solid #e8ede5; background: repeating-linear-gradient(to bottom, transparent 0, transparent 59px, #e7ece5 59px, #e7ece5 60px); }
 .calendar-day-column.calendar-today { background-color: rgba(230, 238, 225, .2); }
-.calendar-event { position: absolute; z-index: 2; box-sizing: border-box; overflow: hidden; padding: 4px 4px 3px 6px; border: 1px solid color-mix(in srgb, var(--event-color) 42%, #fff); border-left: 3px solid var(--event-color); border-radius: 6px; background: color-mix(in srgb, var(--event-color) 15%, #fffefa); }
+.calendar-event { position: relative; z-index: 2; box-sizing: border-box; overflow: hidden; padding: 4px 4px 3px 6px; border: 1px solid color-mix(in srgb, var(--event-color) 42%, #fff); border-left: 3px solid var(--event-color); border-radius: 6px; background: color-mix(in srgb, var(--event-color) 15%, #fffefa); }
+.calendar-day-column.calendar-positioned .calendar-event { position: absolute; }
 .calendar-event-link { position: relative; z-index: 1; display: flex; height: 100%; flex-direction: column; gap: 3px; overflow: hidden; padding-right: 18px; color: #58685b; text-decoration: none; }
 .calendar-event-link:hover .calendar-event-title { text-decoration: underline; text-underline-offset: 2px; }
 .calendar-event-time { color: #758579; font-size: 8px; line-height: 1.15; white-space: nowrap; }
