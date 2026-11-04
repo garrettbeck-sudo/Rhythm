@@ -1,0 +1,1 @@
+- [Rhythm scope rules](rhythm-scope-rules.md) — build only the requested feature, use PostgreSQL, scope personal data, and stay off main without commits.
