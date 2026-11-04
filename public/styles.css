@@ -256,6 +256,14 @@ a { color: inherit; }
 .event-create-actions .button { white-space: nowrap; }
 .event-create-button { flex: 0 0 auto; }
 .event-status-label { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: 4px 8px; border: 1px solid #dbc5a4; border-radius: 99px; color: #806c4d; background: #fbf4e9; font-size: 8px; font-weight: 700; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
+.event-star-button { width: 32px; height: 32px; display: inline-grid; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 9px; color: #97a28f; background: transparent; cursor: pointer; font: 22px/1 Arial, sans-serif; transition: color .16s ease, background .16s ease, border-color .16s ease, transform .16s ease; }
+.event-star-button:hover { transform: translateY(-1px); border-color: #eee1c4; color: #bb8a36; background: #fff9ec; }
+.event-star-button.is-starred { color: #c9953f; }
+.event-star-button:focus-visible { outline: 3px solid rgba(201, 149, 63, .3); outline-offset: 2px; }
+.event-star-button:disabled { cursor: wait; opacity: .55; }
+.event-star-status { flex: 0 0 auto; color: #9a5b49; font-size: 9px; }
+.event-star-status:empty { display: none; }
+.event-star-button-detail { width: 34px; height: 34px; font-size: 24px; }
 .event-unplanned.event-row { margin: 8px 0; padding: 14px 12px; border: 1px dashed #b4c4ad; border-radius: 12px; }
 .event-unplanned.event-detail-card,
 .event-unplanned.event-form-card,

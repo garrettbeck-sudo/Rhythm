@@ -3,7 +3,7 @@ const path = require("node:path");
 const express = require("express");
 const { and, desc, eq } = require("drizzle-orm");
 const { db, pool } = require("./db");
-const { categories, events, users } = require("./db/schema");
+const { categories, events, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
 const {
   renderAuthPage,
@@ -167,9 +167,10 @@ async function getEventCategories() {
 
 async function findEventForUser(eventId, userId) {
   const [event] = await db
-    .select(joinedEventSelection)
+    .select({ ...joinedEventSelection, starId: stars.id })
     .from(events)
     .innerJoin(categories, eq(events.categoryId, categories.id))
+    .leftJoin(stars, and(eq(stars.eventId, events.id), eq(stars.userId, userId)))
     .where(and(eq(events.id, eventId), eq(events.userId, userId)))
     .limit(1);
   return event || null;
@@ -388,9 +389,10 @@ app.get("/week", (req, res) => {
 app.get("/events", async (req, res, next) => {
   try {
     const userEvents = await db
-      .select(joinedEventSelection)
+      .select({ ...joinedEventSelection, starId: stars.id })
       .from(events)
       .innerJoin(categories, eq(events.categoryId, categories.id))
+      .leftJoin(stars, and(eq(stars.eventId, events.id), eq(stars.userId, req.currentUser.id)))
       .where(eq(events.userId, req.currentUser.id))
       .orderBy(desc(events.date), desc(events.startTime), desc(events.id));
     const csrfToken = issueCsrfToken(res);
@@ -407,6 +409,71 @@ app.get("/events", async (req, res, next) => {
         notice,
       }),
     );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/starred", async (req, res, next) => {
+  try {
+    const starredEvents = await db
+      .select({ ...joinedEventSelection, starId: stars.id })
+      .from(events)
+      .innerJoin(categories, eq(events.categoryId, categories.id))
+      .innerJoin(stars, and(
+        eq(stars.eventId, events.id),
+        eq(stars.userId, req.currentUser.id),
+      ))
+      .where(eq(events.userId, req.currentUser.id))
+      .orderBy(desc(events.date), desc(events.startTime), desc(events.id));
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(
+      renderEventListPage({
+        events: starredEvents,
+        email: req.currentUser.email,
+        csrfToken,
+        isStarredPage: true,
+      }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/events/:id/star", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return res.status(404).json({ error: "Event not found." });
+  if (!csrfMatches(req)) return res.status(403).json({ error: "This request expired. Refresh and try again." });
+
+  const starredValue = req.body?.starred;
+  if (starredValue !== "true" && starredValue !== "false") {
+    return res.status(400).json({ error: "Choose a valid star state." });
+  }
+
+  try {
+    const savedState = await db.transaction(async (tx) => {
+      const [ownedEvent] = await tx
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
+        .for("update")
+        .limit(1);
+      if (!ownedEvent) return null;
+
+      if (starredValue === "true") {
+        await tx
+          .insert(stars)
+          .values({ userId: req.currentUser.id, eventId })
+          .onConflictDoNothing();
+      } else {
+        await tx
+          .delete(stars)
+          .where(and(eq(stars.userId, req.currentUser.id), eq(stars.eventId, eventId)));
+      }
+      return starredValue === "true";
+    });
+    if (savedState === null) return res.status(404).json({ error: "Event not found." });
+    return res.json({ starred: savedState });
   } catch (error) {
     return next(error);
   }
@@ -639,10 +706,24 @@ app.post("/events/:id/delete", async (req, res, next) => {
   }
 
   try {
-    const [deleted] = await db
-      .delete(events)
-      .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
-      .returning({ id: events.id });
+    const deleted = await db.transaction(async (tx) => {
+      const [ownedEvent] = await tx
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
+        .for("update")
+        .limit(1);
+      if (!ownedEvent) return null;
+
+      await tx
+        .delete(stars)
+        .where(and(eq(stars.userId, req.currentUser.id), eq(stars.eventId, eventId)));
+      const [deletedEvent] = await tx
+        .delete(events)
+        .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
+        .returning({ id: events.id });
+      return deletedEvent || null;
+    });
     if (!deleted) return sendEventNotFound(res);
     return res.redirect(303, "/events?status=deleted");
   } catch (error) {

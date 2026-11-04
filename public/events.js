@@ -169,3 +169,63 @@
     });
   }
 })();
+
+(() => {
+  const starredPage = document.querySelector('[data-starred-page="true"]');
+  const buttons = document.querySelectorAll("[data-star-toggle]");
+
+  for (const button of buttons) {
+    const eventItem = button.closest("[data-event-item]");
+    const status = eventItem?.querySelector("[data-star-status]");
+    const title = eventItem?.dataset.eventTitle || "event";
+    let savedState = button.dataset.starred === "true";
+
+    function applyStarState(isStarred) {
+      button.dataset.starred = String(isStarred);
+      button.setAttribute("aria-pressed", String(isStarred));
+      const actionLabel = isStarred ? `Remove ${title} from Starred` : `Add ${title} to Starred`;
+      button.setAttribute("aria-label", actionLabel);
+      button.title = actionLabel;
+      button.classList.toggle("is-starred", isStarred);
+      const icon = button.querySelector("span");
+      if (icon) icon.textContent = isStarred ? "★" : "☆";
+    }
+
+    button.addEventListener("click", async () => {
+      const previousState = savedState;
+      const requestedState = !savedState;
+      button.disabled = true;
+      if (status) status.textContent = "";
+      applyStarState(requestedState);
+
+      try {
+        const response = await fetch(`/events/${encodeURIComponent(button.dataset.eventId)}/star`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            _csrf: button.dataset.csrfToken,
+            starred: String(requestedState),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || typeof result.starred !== "boolean") {
+          throw new Error(result.error || "Could not save this star.");
+        }
+
+        savedState = result.starred;
+        applyStarState(savedState);
+        if (starredPage && !savedState) window.location.reload();
+      } catch {
+        savedState = previousState;
+        applyStarState(savedState);
+        if (status) status.textContent = "Couldn't save this star. Try again.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+})();

@@ -167,7 +167,7 @@ function renderWeekPage({ email, csrfToken }) {
 function eventHeader({ email, csrfToken }) {
   return `<header class="week-header event-header">
     ${brandMark()}
-    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a></nav>
+    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a><a href="/starred">Starred</a></nav>
     <div class="account-actions">
       <span class="account-email">${escapeHtml(email)}</span>
       <form method="post" action="/logout" class="logout-form">
@@ -213,8 +213,20 @@ function renderUnplannedLabel(event) {
   return event.planned === false ? '<span class="event-status-label event-status-unplanned">Unplanned</span>' : "";
 }
 
-function renderEventListPage({ events = [], email, csrfToken, notice }) {
+function renderStarControl(event, csrfToken, variant = "") {
+  const isStarred = event.starId != null;
+  const title = String(event.title ?? "event");
+  const actionLabel = isStarred ? `Remove ${title} from Starred` : `Add ${title} to Starred`;
+  const variantClass = variant ? ` ${variant}` : "";
+  return `<button class="event-star-button${variantClass}${isStarred ? " is-starred" : ""}" type="button" data-star-toggle data-starred="${isStarred}" data-event-id="${escapeHtml(event.id)}" data-csrf-token="${escapeHtml(csrfToken)}" aria-label="${escapeHtml(actionLabel)}" aria-pressed="${isStarred}" title="${escapeHtml(actionLabel)}"><span aria-hidden="true">${isStarred ? "★" : "☆"}</span></button><span class="event-star-status" data-star-status role="status" aria-live="polite"></span>`;
+}
+
+function renderEventListPage({ events = [], email, csrfToken, notice, isStarredPage = false }) {
   const sortedEvents = [...events].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+  const pageTitle = isStarredPage ? "Starred" : "Your events";
+  const pageDescription = isStarredPage
+    ? "The events you marked to find quickly."
+    : "All the pieces you're making room for, in one place.";
   const rows = sortedEvents.length
     ? `<div class="event-list" role="list">${sortedEvents.map((event) => {
       const color = safeCategoryColor(event.categoryColor);
@@ -228,38 +240,50 @@ function renderEventListPage({ events = [], email, csrfToken, notice }) {
           <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}${renderUnplannedLabel(event)}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
         </a>
         <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
+        ${renderStarControl(event, csrfToken, "event-star-button-list")}
         <a class="event-row-arrow" href="/events/${encodeURIComponent(event.id)}" aria-label="Open ${escapeHtml(event.title)}">↗</a>
         <span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span>
       </div>`;
     }).join("")}</div>`
-    : `<div class="event-empty">
+    : isStarredPage
+      ? `<div class="event-empty">
+          <span class="event-empty-mark" aria-hidden="true"></span>
+          <span class="eyebrow">A SHORTLIST FOR LATER</span>
+          <h2>No starred events yet.</h2>
+          <p>Star an event from its row or detail page and it will show up here.</p>
+          <a class="button button-primary" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
+        </div>`
+      : `<div class="event-empty">
         <span class="event-empty-mark" aria-hidden="true"></span>
         <span class="eyebrow">A LITTLE ROOM TO BEGIN</span>
         <h2>Your plans will find their rhythm here.</h2>
         <p>Add a class, a meal, or a moment for yourself. Your list will grow one good plan at a time.</p>
         <a class="button button-primary" href="/events/new">Create your first event <span aria-hidden="true">↗</span></a>
       </div>`;
-  const content = `<main class="week-shell event-shell">
+  const actions = isStarredPage
+    ? `<a class="button button-secondary event-create-button" href="/events">All events <span aria-hidden="true">↗</span></a>`
+    : `<div class="event-create-actions">
+        <a class="button button-secondary" href="/events/new/unplanned">Log unplanned <span aria-hidden="true">↗</span></a>
+        <a class="button button-primary event-create-button" href="/events/new">Add an event <span aria-hidden="true">↗</span></a>
+      </div>`;
+  const content = `<main class="week-shell event-shell" data-starred-page="${isStarredPage}">
     ${eventHeader({ email, csrfToken })}
     <section class="event-page-intro">
       <div>
-        <span class="eyebrow"><span class="eyebrow-dot"></span> THE SHAPE OF YOUR DAYS</span>
-        <h1>Your events<span class="title-period">.</span></h1>
-        <p>All the pieces you're making room for, in one place.</p>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> ${isStarredPage ? "KEEP WHAT MATTERS CLOSE" : "THE SHAPE OF YOUR DAYS"}</span>
+        <h1>${pageTitle}<span class="title-period">.</span></h1>
+        <p>${pageDescription}</p>
       </div>
-      <div class="event-create-actions">
-        <a class="button button-secondary" href="/events/new/unplanned">Log unplanned <span aria-hidden="true">↗</span></a>
-        <a class="button button-primary event-create-button" href="/events/new">Add an event <span aria-hidden="true">↗</span></a>
-      </div>
+      ${actions}
     </section>
-    ${notice ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
-    <section class="event-list-panel" aria-label="Your events">
-      <div class="event-list-heading"><span>YOUR PLANS</span><span>${sortedEvents.length} ${sortedEvents.length === 1 ? "event" : "events"}</span></div>
+    ${notice && !isStarredPage ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
+    <section class="event-list-panel" aria-label="${isStarredPage ? "Starred events" : "Your events"}">
+      <div class="event-list-heading"><span>${isStarredPage ? "YOUR STARRED EVENTS" : "YOUR PLANS"}</span><span>${sortedEvents.length} ${sortedEvents.length === 1 ? "event" : "events"}</span></div>
       ${rows}
     </section>
     <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: "Your events", bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
+  return shell({ title: pageTitle, bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
 }
 
 function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
@@ -358,7 +382,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     <section class="event-detail-wrap">
       <a class="back-link" href="/events">← All events</a>
       <article class="event-detail-card${completedClass}${unplannedClass}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
-        <div class="event-detail-top"><div class="event-detail-badges"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span>${renderUnplannedLabel(event)}</div><span class="event-detail-id">${event.planned === false ? `EVENT ${escapeHtml(event.id)}` : `PLAN ${escapeHtml(event.id)}`}</span></div>
+        <div class="event-detail-top"><div class="event-detail-badges"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span>${renderUnplannedLabel(event)}${renderStarControl(event, csrfToken, "event-star-button-detail")}</div><span class="event-detail-id">${event.planned === false ? `EVENT ${escapeHtml(event.id)}` : `PLAN ${escapeHtml(event.id)}`}</span></div>
         <h1>${escapeHtml(event.title)}<span class="title-period">.</span></h1>
         ${completionControl ? `<div class="event-detail-completion">${completionControl}<span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span></div>` : ""}
         <div class="event-detail-schedule">
