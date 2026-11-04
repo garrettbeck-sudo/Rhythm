@@ -121,7 +121,10 @@ function renderWeekPage({ email, csrfToken }) {
         <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR SPACE, JUST FOR YOU</span>
         <h1>My Week<span class="title-period">.</span></h1>
         <p>Make room for what matters, and let the rest find its place.</p>
-        <a class="week-events-link" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
+        <div class="week-intro-links">
+          <a class="week-events-link" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
+          <a class="week-events-link" href="/dashboard">View your dashboard <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
       <div class="intro-orbit" aria-hidden="true">
         <div class="intro-orbit-ring"></div>
@@ -167,7 +170,7 @@ function renderWeekPage({ email, csrfToken }) {
 function eventHeader({ email, csrfToken }) {
   return `<header class="week-header event-header">
     ${brandMark()}
-    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a><a href="/starred">Starred</a></nav>
+    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a><a href="/starred">Starred</a><a href="/dashboard">Dashboard</a></nav>
     <div class="account-actions">
       <span class="account-email">${escapeHtml(email)}</span>
       <form method="post" action="/logout" class="logout-form">
@@ -176,6 +179,59 @@ function eventHeader({ email, csrfToken }) {
       </form>
     </div>
   </header>`;
+}
+
+function renderDashboardPage({ email, csrfToken, stats, chartData, currentWeekLabel }) {
+  const chartJson = escapeHtml(JSON.stringify(chartData));
+  const content = `<main class="week-shell event-shell dashboard-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="dashboard-intro">
+      <div>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR RECENT RHYTHM</span>
+        <h1>Dashboard<span class="title-period">.</span></h1>
+        <p>A quick look at the plans you made and what you completed.</p>
+      </div>
+      <div class="dashboard-week-label"><span>THIS WEEK</span><strong>${escapeHtml(currentWeekLabel)}</strong><small>Monday–Sunday</small></div>
+    </section>
+
+    <section class="dashboard-stats" aria-label="This week's stats">
+      <article class="dashboard-stat-card">
+        <span class="dashboard-stat-label">Completion rate</span>
+        <strong class="dashboard-stat-value">${stats.completionRate}%</strong>
+        <span class="dashboard-stat-detail">${stats.plannedCompleted} of ${stats.plannedTotal} planned items completed</span>
+      </article>
+      <article class="dashboard-stat-card">
+        <span class="dashboard-stat-label">Workouts completed</span>
+        <strong class="dashboard-stat-value">${stats.workoutsCompleted}</strong>
+        <span class="dashboard-stat-detail">Planned or unplanned</span>
+      </article>
+      <article class="dashboard-stat-card">
+        <span class="dashboard-stat-label">Unplanned events logged</span>
+        <strong class="dashboard-stat-value">${stats.unplannedEventsLogged}</strong>
+        <span class="dashboard-stat-detail">Events added outside your plan</span>
+      </article>
+    </section>
+
+    <section class="dashboard-chart-panel" aria-labelledby="dashboard-chart-title">
+      <div class="dashboard-chart-heading">
+        <div>
+          <span class="eyebrow">FOUR-WEEK VIEW</span>
+          <h2 id="dashboard-chart-title">Planned and completed by category</h2>
+          <p>Completed counts include unplanned events; the completion rate above excludes them.</p>
+        </div>
+      </div>
+      <div class="dashboard-chart-wrap">
+        <canvas id="dashboard-chart" data-chart="${chartJson}" role="img" aria-label="Bar chart of planned and completed events by category for the last four weeks">Your browser does not support charts.</canvas>
+      </div>
+    </section>
+    <footer class="week-footer"><a href="/events">← Back to your events</a><span>One thing at a time.</span></footer>
+  </main>`;
+  return shell({
+    title: "Dashboard",
+    bodyClass: "page-events page-dashboard",
+    content,
+    scripts: ["/vendor/chart.js/chart.umd.js", "/assets/dashboard.js"],
+  });
 }
 
 function formatEventDate(value) {
@@ -488,6 +544,7 @@ function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
 
 module.exports = {
   renderAuthPage,
+  renderDashboardPage,
   renderWeekPage,
   renderEventListPage,
   renderEventFormPage,
