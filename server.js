@@ -1,11 +1,18 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
-const { eq } = require("drizzle-orm");
+const { and, desc, eq } = require("drizzle-orm");
 const { db, pool } = require("./db");
-const { users } = require("./db/schema");
+const { categories, events, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
-const { renderAuthPage, renderWeekPage } = require("./views/pages");
+const {
+  renderAuthPage,
+  renderWeekPage,
+  renderEventListPage,
+  renderEventFormPage,
+  renderEventDetailPage,
+  renderEventDeleteConfirmationPage,
+} = require("./views/pages");
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
@@ -91,9 +98,14 @@ function csrfMatches(req) {
 }
 
 function sendAuthPage(res, options, status = 200) {
-  const csrfToken = crypto.randomBytes(32).toString("hex");
-  setCsrfCookie(res, csrfToken);
+  const csrfToken = issueCsrfToken(res);
   return res.status(status).type("html").send(renderAuthPage({ ...options, csrfToken }));
+}
+
+function issueCsrfToken(res) {
+  const token = crypto.randomBytes(32).toString("hex");
+  setCsrfCookie(res, token);
+  return token;
 }
 
 function requireLogin() {
@@ -123,6 +135,141 @@ function requireLogin() {
       return next(error);
     }
   };
+}
+
+const joinedEventSelection = {
+  id: events.id,
+  title: events.title,
+  categoryId: events.categoryId,
+  categoryName: categories.name,
+  categoryColor: categories.color,
+  date: events.date,
+  startTime: events.startTime,
+  endTime: events.endTime,
+  notes: events.notes,
+  distanceMi: events.distanceMi,
+  proteinG: events.proteinG,
+};
+
+async function getEventCategories() {
+  return db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      color: categories.color,
+      isFixed: categories.isFixed,
+    })
+    .from(categories)
+    .orderBy(categories.id);
+}
+
+async function findEventForUser(eventId, userId) {
+  const [event] = await db
+    .select(joinedEventSelection)
+    .from(events)
+    .innerJoin(categories, eq(events.categoryId, categories.id))
+    .where(and(eq(events.id, eventId), eq(events.userId, userId)))
+    .limit(1);
+  return event || null;
+}
+
+function parsePositiveId(value) {
+  if ((typeof value !== "string" && typeof value !== "number") || !/^[1-9]\d*$/.test(String(value))) {
+    return null;
+  }
+  const id = Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
+function eventFormValues(body = {}, existing = {}) {
+  const value = (key, fallback = "") =>
+    typeof body[key] === "string"
+      ? body[key]
+      : fallback == null
+        ? ""
+        : String(fallback);
+
+  return {
+    id: existing.id,
+    title: value("title", existing.title),
+    categoryId: value("categoryId", existing.categoryId),
+    date: value("date", existing.date),
+    startTime: value("startTime", existing.startTime),
+    endTime: value("endTime", existing.endTime),
+    notes: value("notes", existing.notes),
+    distanceMi: value("distanceMi", existing.distanceMi),
+    proteinG: value("proteinG", existing.proteinG),
+  };
+}
+
+function parseOptionalNumber(value) {
+  if (value.trim() === "") return { valid: true, value: null };
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? { valid: true, value: parsed }
+    : { valid: false, value: null };
+}
+
+function parseEventForm(form, availableCategories) {
+  const categoryId = parsePositiveId(form.categoryId);
+  const category = availableCategories.find((item) => item.id === categoryId);
+  if (!category) return { error: "Choose a category before saving this event." };
+
+  const title = form.title.trim();
+  const date = form.date.trim();
+  const startTime = form.startTime.trim();
+  const endTime = form.endTime.trim();
+  if (!title || !date || !startTime || !endTime) {
+    return { error: "Complete the required event details before saving." };
+  }
+
+  const distance = category.name === "Workout"
+    ? parseOptionalNumber(form.distanceMi)
+    : { valid: true, value: null };
+  const protein = category.name === "Meal"
+    ? parseOptionalNumber(form.proteinG)
+    : { valid: true, value: null };
+  if (!distance.valid || !protein.valid) {
+    return { error: "Enter a valid number for the event details." };
+  }
+
+  return {
+    values: {
+      title,
+      categoryId,
+      date,
+      startTime,
+      endTime,
+      notes: form.notes.trim() || null,
+      distanceMi: distance.value,
+      proteinG: protein.value,
+    },
+  };
+}
+
+async function sendEventForm(req, res, { mode, event, error, status = 200, categories: availableCategories }) {
+  const eventCategories = availableCategories || await getEventCategories();
+  const csrfToken = issueCsrfToken(res);
+  return res.status(status).type("html").send(
+    renderEventFormPage({
+      mode,
+      event,
+      categories: eventCategories,
+      email: req.currentUser.email,
+      csrfToken,
+      error,
+    }),
+  );
+}
+
+function sendEventNotFound(res) {
+  return res.status(404).type("html").send(
+    "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Event not found · Rhythm</title><body><h1>Event not found</h1><a href=\"/events\">Return to your events</a></body></html>",
+  );
+}
+
+function isEventConstraintError(error) {
+  return ["22003", "22007", "22P02", "23502", "23503", "23514"].includes(error.code);
 }
 
 app.get("/signup", (req, res) => sendAuthPage(res, { mode: "signup" }));
@@ -202,10 +349,210 @@ app.use(requireLogin());
 
 app.get("/", (req, res) => res.redirect(303, "/week"));
 app.get("/week", (req, res) => {
-  const csrfToken = crypto.randomBytes(32).toString("hex");
-  setCsrfCookie(res, csrfToken);
+  const csrfToken = issueCsrfToken(res);
   res.type("html").send(renderWeekPage({ email: req.currentUser.email, csrfToken }));
 });
+
+app.get("/events", async (req, res, next) => {
+  try {
+    const userEvents = await db
+      .select(joinedEventSelection)
+      .from(events)
+      .innerJoin(categories, eq(events.categoryId, categories.id))
+      .where(eq(events.userId, req.currentUser.id))
+      .orderBy(desc(events.date), desc(events.startTime), desc(events.id));
+    const csrfToken = issueCsrfToken(res);
+    const notice = {
+      created: "Your event was added.",
+      updated: "Your event was updated.",
+      deleted: "Your event was deleted.",
+    }[req.query.status];
+    return res.type("html").send(
+      renderEventListPage({
+        events: userEvents,
+        email: req.currentUser.email,
+        csrfToken,
+        notice,
+      }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/events/new", async (req, res, next) => {
+  try {
+    return await sendEventForm(req, res, { mode: "create", event: {} });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/events", async (req, res, next) => {
+  const form = eventFormValues(req.body);
+  try {
+    const availableCategories = await getEventCategories();
+    if (!csrfMatches(req)) {
+      return await sendEventForm(req, res, {
+        mode: "create",
+        event: form,
+        error: "This form expired. Refresh and try again.",
+        status: 403,
+        categories: availableCategories,
+      });
+    }
+
+    const parsed = parseEventForm(form, availableCategories);
+    if (parsed.error) {
+      return await sendEventForm(req, res, {
+        mode: "create",
+        event: form,
+        error: parsed.error,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
+
+    const [created] = await db
+      .insert(events)
+      .values({ ...parsed.values, userId: req.currentUser.id })
+      .returning({ id: events.id });
+    return res.redirect(303, `/events/${created.id}`);
+  } catch (error) {
+    if (isEventConstraintError(error)) {
+      return sendEventForm(req, res, {
+        mode: "create",
+        event: form,
+        error: "The event could not be saved. Check the details and try again.",
+        status: 400,
+      });
+    }
+    return next(error);
+  }
+});
+
+app.get("/events/:id/edit", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return sendEventNotFound(res);
+
+  try {
+    const event = await findEventForUser(eventId, req.currentUser.id);
+    if (!event) return sendEventNotFound(res);
+    return await sendEventForm(req, res, { mode: "edit", event });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/events/:id/edit", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return sendEventNotFound(res);
+
+  try {
+    const existing = await findEventForUser(eventId, req.currentUser.id);
+    if (!existing) return sendEventNotFound(res);
+    const availableCategories = await getEventCategories();
+    const form = eventFormValues(req.body, existing);
+
+    if (!csrfMatches(req)) {
+      return await sendEventForm(req, res, {
+        mode: "edit",
+        event: form,
+        error: "This form expired. Refresh and try again.",
+        status: 403,
+        categories: availableCategories,
+      });
+    }
+
+    const parsed = parseEventForm(form, availableCategories);
+    if (parsed.error) {
+      return await sendEventForm(req, res, {
+        mode: "edit",
+        event: form,
+        error: parsed.error,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
+
+    try {
+      const [updated] = await db
+        .update(events)
+        .set(parsed.values)
+        .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
+        .returning({ id: events.id });
+      if (!updated) return sendEventNotFound(res);
+      return res.redirect(303, `/events/${eventId}`);
+    } catch (error) {
+      if (isEventConstraintError(error)) {
+        return sendEventForm(req, res, {
+          mode: "edit",
+          event: form,
+          error: "The event could not be saved. Check the details and try again.",
+          status: 400,
+          categories: availableCategories,
+        });
+      }
+      return next(error);
+    }
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/events/:id", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return sendEventNotFound(res);
+
+  try {
+    const event = await findEventForUser(eventId, req.currentUser.id);
+    if (!event) return sendEventNotFound(res);
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(
+      renderEventDetailPage({ event, email: req.currentUser.email, csrfToken }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/events/:id/delete", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return sendEventNotFound(res);
+
+  try {
+    const event = await findEventForUser(eventId, req.currentUser.id);
+    if (!event) return sendEventNotFound(res);
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(
+      renderEventDeleteConfirmationPage({ event, email: req.currentUser.email, csrfToken }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/events/:id/delete", async (req, res, next) => {
+  const eventId = parsePositiveId(req.params.id);
+  if (!eventId) return sendEventNotFound(res);
+  if (!csrfMatches(req) || req.body.confirmDelete !== "yes") {
+    return res.status(403).type("html").send(
+      "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Confirmation required · Rhythm</title><body><h1>Please confirm this action</h1><a href=\"/events\">Return to your events</a></body></html>",
+    );
+  }
+
+  try {
+    const [deleted] = await db
+      .delete(events)
+      .where(and(eq(events.id, eventId), eq(events.userId, req.currentUser.id)))
+      .returning({ id: events.id });
+    if (!deleted) return sendEventNotFound(res);
+    return res.redirect(303, "/events?status=deleted");
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post("/logout", (req, res) => {
   if (!csrfMatches(req)) {
     return res.status(403).type("html").send(

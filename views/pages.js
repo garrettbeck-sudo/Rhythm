@@ -7,7 +7,10 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function shell({ title, content, bodyClass = "" }) {
+function shell({ title, content, bodyClass = "", scripts = [] }) {
+  const scriptTags = scripts
+    .map((src) => `<script src="${escapeHtml(src)}" defer></script>`)
+    .join("\n    ");
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -19,6 +22,7 @@ function shell({ title, content, bodyClass = "" }) {
   </head>
   <body class="${bodyClass}">
     ${content}
+    ${scriptTags}
   </body>
 </html>`;
 }
@@ -117,6 +121,7 @@ function renderWeekPage({ email, csrfToken }) {
         <span class="eyebrow"><span class="eyebrow-dot"></span> YOUR SPACE, JUST FOR YOU</span>
         <h1>My Week<span class="title-period">.</span></h1>
         <p>Make room for what matters, and let the rest find its place.</p>
+        <a class="week-events-link" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
       </div>
       <div class="intro-orbit" aria-hidden="true">
         <div class="intro-orbit-ring"></div>
@@ -159,4 +164,205 @@ function renderWeekPage({ email, csrfToken }) {
   return shell({ title: "My week", bodyClass: "page-week", content });
 }
 
-module.exports = { renderAuthPage, renderWeekPage };
+function eventHeader({ email, csrfToken }) {
+  return `<header class="week-header event-header">
+    ${brandMark()}
+    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a></nav>
+    <div class="account-actions">
+      <span class="account-email">${escapeHtml(email)}</span>
+      <form method="post" action="/logout" class="logout-form">
+        <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
+        <button class="button button-quiet" type="submit">Log out <span aria-hidden="true">↗</span></button>
+      </form>
+    </div>
+  </header>`;
+}
+
+function formatEventDate(value) {
+  const date = String(value ?? "");
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return escapeHtml(date);
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return escapeHtml(new Intl.DateTimeFormat("en", {
+    weekday: "long", month: "long", day: "numeric", year: "numeric",
+  }).format(parsed));
+}
+
+function safeCategoryColor(value) {
+  const color = String(value ?? "");
+  return /^#[0-9a-f]{3,8}$/i.test(color) ? color : "#638c6a";
+}
+
+function renderEventListPage({ events = [], email, csrfToken, notice }) {
+  const sortedEvents = [...events].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+  const rows = sortedEvents.length
+    ? `<div class="event-list" role="list">${sortedEvents.map((event) => {
+      const color = safeCategoryColor(event.categoryColor);
+      return `<a class="event-row" role="listitem" href="/events/${encodeURIComponent(event.id)}">
+        <span class="event-color-mark" style="--event-color:${color}" aria-hidden="true"></span>
+        <span class="event-row-main">
+          <span class="event-row-title">${escapeHtml(event.title)}</span>
+          <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
+        </span>
+        <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
+        <span class="event-row-arrow" aria-hidden="true">↗</span>
+      </a>`;
+    }).join("")}</div>`
+    : `<div class="event-empty">
+        <span class="event-empty-mark" aria-hidden="true"></span>
+        <span class="eyebrow">A LITTLE ROOM TO BEGIN</span>
+        <h2>Your plans will find their rhythm here.</h2>
+        <p>Add a class, a meal, or a moment for yourself. Your list will grow one good plan at a time.</p>
+        <a class="button button-primary" href="/events/new">Create your first event <span aria-hidden="true">↗</span></a>
+      </div>`;
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-page-intro">
+      <div>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> THE SHAPE OF YOUR DAYS</span>
+        <h1>Your events<span class="title-period">.</span></h1>
+        <p>All the pieces you're making room for, in one place.</p>
+      </div>
+      <a class="button button-primary event-create-button" href="/events/new">Add an event <span aria-hidden="true">↗</span></a>
+    </section>
+    ${notice ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
+    <section class="event-list-panel" aria-label="Your events">
+      <div class="event-list-heading"><span>YOUR PLANS</span><span>${sortedEvents.length} ${sortedEvents.length === 1 ? "event" : "events"}</span></div>
+      ${rows}
+    </section>
+    <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
+  </main>`;
+  return shell({ title: "Your events", bodyClass: "page-events", content });
+}
+
+function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error }) {
+  const isEdit = mode === "edit";
+  const action = isEdit ? `/events/${encodeURIComponent(event.id)}/edit` : "/events";
+  const safe = (value) => escapeHtml(value);
+  const categoryOptions = categories.map((category) => {
+    const selected = String(category.id) === String(event.categoryId) ? " selected" : "";
+    return `<option value="${safe(category.id)}" data-category-name="${safe(category.name)}"${selected}>${safe(category.name)}${category.isFixed ? " · fixed commitment" : ""}</option>`;
+  }).join("");
+  const selectedCategoryName = categories.find((category) => String(category.id) === String(event.categoryId))?.name || event.categoryName || "";
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-form-layout">
+      <div class="event-form-aside">
+        <a class="back-link" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">← ${isEdit ? "Back to event" : "All events"}</a>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> ${isEdit ? "A SMALL ADJUSTMENT" : "MAKE A LITTLE SPACE"}</span>
+        <h1>${isEdit ? "Shape your plan" : "Add to your week"}<span class="title-period">.</span></h1>
+        <p>${isEdit ? "Plans can change. Give this one the shape it needs now." : "Give something that matters a place in your week."}</p>
+        <div class="form-aside-note"><span class="reminder-dot"></span><span>Keep it simple. You can always revisit this.</span></div>
+      </div>
+      <section class="event-form-card" aria-label="${isEdit ? "Edit event" : "New event"}">
+        <div class="event-form-card-heading"><span class="eyebrow">${isEdit ? "EDIT THE DETAILS" : "START WITH THE DETAILS"}</span><h2>${isEdit ? "A plan in progress" : "What's on your mind?"}</h2></div>
+        ${error ? `<div class="message message-error" role="alert">${safe(error)}</div>` : ""}
+        <form class="event-form" method="post" action="${action}" data-event-form>
+          <input type="hidden" name="_csrf" value="${safe(csrfToken)}">
+          <label for="event-title">Event title</label>
+          <input id="event-title" name="title" type="text" maxlength="180" placeholder="e.g. Morning swim" value="${safe(event.title)}" required>
+
+          <label for="event-category">Category</label>
+          <select id="event-category" name="categoryId" data-category-select required>
+            <option value="">Choose a category</option>${categoryOptions}
+          </select>
+
+          <label for="event-date">Date</label>
+          <input id="event-date" name="date" type="date" value="${safe(event.date)}" required>
+
+          <div class="event-time-fields">
+            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}" required></div>
+            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}" required></div>
+          </div>
+
+          <div class="event-category-field" data-category-field="Workout" data-field-name="distanceMi"${selectedCategoryName === "Workout" ? "" : " hidden"}>
+            <label for="event-distance">Distance <span class="field-unit">miles</span></label>
+            <input id="event-distance" name="distanceMi" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Optional" value="${safe(event.distanceMi)}">
+          </div>
+          <div class="event-category-field" data-category-field="Meal" data-field-name="proteinG"${selectedCategoryName === "Meal" ? "" : " hidden"}>
+            <label for="event-protein">Protein <span class="field-unit">grams</span></label>
+            <input id="event-protein" name="proteinG" type="number" inputmode="decimal" min="0" step="1" placeholder="Optional" value="${safe(event.proteinG)}">
+          </div>
+
+          <label for="event-notes">Notes <span class="field-unit">optional</span></label>
+          <textarea id="event-notes" name="notes" rows="4" maxlength="2000" placeholder="Anything you want to remember about this plan">${safe(event.notes)}</textarea>
+          <div class="event-form-actions">
+            <a class="button button-secondary" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">Cancel</a>
+            <button class="button button-primary" type="submit">${isEdit ? "Save changes" : "Add event"} <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </section>
+    </section>
+    <footer class="week-footer"><span>Your plans are personal. Your space stays yours.</span><span>Rhythm</span></footer>
+  </main>`;
+  return shell({
+    title: isEdit ? "Edit event" : "New event",
+    bodyClass: "page-events",
+    content,
+    scripts: ["/assets/events.js"],
+  });
+}
+
+function renderEventDetailPage({ event = {}, email, csrfToken }) {
+  const color = safeCategoryColor(event.categoryColor);
+  const optionalDetails = [
+    event.distanceMi != null && event.distanceMi !== "" ? `<div class="detail-extra"><span>Distance</span><strong>${escapeHtml(event.distanceMi)} mi</strong></div>` : "",
+    event.proteinG != null && event.proteinG !== "" ? `<div class="detail-extra"><span>Protein</span><strong>${escapeHtml(event.proteinG)} g</strong></div>` : "",
+  ].filter(Boolean).join("");
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-detail-wrap">
+      <a class="back-link" href="/events">← All events</a>
+      <article class="event-detail-card">
+        <div class="event-detail-top"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span><span class="event-detail-id">PLAN ${escapeHtml(event.id)}</span></div>
+        <h1>${escapeHtml(event.title)}<span class="title-period">.</span></h1>
+        <div class="event-detail-schedule">
+          <div class="schedule-icon" aria-hidden="true"></div>
+          <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span></div>
+        </div>
+        ${optionalDetails ? `<div class="event-detail-extras">${optionalDetails}</div>` : ""}
+        ${event.notes ? `<div class="event-notes"><span class="detail-label">A NOTE TO YOURSELF</span><p>${escapeHtml(event.notes)}</p></div>` : ""}
+        <div class="event-detail-actions">
+          <a class="button button-primary" href="/events/${encodeURIComponent(event.id)}/edit">Edit event <span aria-hidden="true">↗</span></a>
+          <a class="button button-danger-quiet" href="/events/${encodeURIComponent(event.id)}/delete">Delete</a>
+        </div>
+      </article>
+      <p class="detail-footnote">Plans can change. Make this one yours.</p>
+    </section>
+    <footer class="week-footer"><span>Rhythm is here for the whole you.</span><span>One thing at a time.</span></footer>
+  </main>`;
+  return shell({ title: event.title || "Event details", bodyClass: "page-events", content });
+}
+
+function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-delete-wrap">
+      <a class="back-link" href="/events/${encodeURIComponent(event.id)}">← Keep this event</a>
+      <div class="event-delete-card">
+        <span class="delete-mark" aria-hidden="true">!</span>
+        <span class="eyebrow">A MOMENT BEFORE YOU LET GO</span>
+        <h1>Are you sure?</h1>
+        <p class="delete-copy">This will remove <strong>${escapeHtml(event.title)}</strong> from your plans. You won't be able to undo this.</p>
+        <div class="delete-event-summary"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${escapeHtml(event.startTime)}–${escapeHtml(event.endTime)}</small></span></div>
+        <form method="post" action="/events/${encodeURIComponent(event.id)}/delete" class="delete-actions">
+          <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
+          <input type="hidden" name="confirmDelete" value="yes">
+          <a class="button button-secondary" href="/events/${encodeURIComponent(event.id)}">Cancel, keep it</a>
+          <button class="button button-danger" type="submit">Yes, delete event</button>
+        </form>
+      </div>
+    </section>
+    <footer class="week-footer"><span>Your plans are personal. Your space stays yours.</span><span>Rhythm</span></footer>
+  </main>`;
+  return shell({ title: "Delete event", bodyClass: "page-events", content });
+}
+
+module.exports = {
+  renderAuthPage,
+  renderWeekPage,
+  renderEventListPage,
+  renderEventFormPage,
+  renderEventDetailPage,
+  renderEventDeleteConfirmationPage,
+};
