@@ -3,7 +3,7 @@ const path = require("node:path");
 const express = require("express");
 const { and, asc, desc, eq, gte, ilike, lte, or } = require("drizzle-orm");
 const { db, pool } = require("./db");
-const { categories, events, stars, users } = require("./db/schema");
+const { categories, events, routines, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
 const { getCalendarWeekRange, isValidDateOnly } = require("./calendar/week");
 const {
@@ -11,6 +11,7 @@ const {
   calculateCurrentWeekStats,
   getDashboardDateRanges,
 } = require("./dashboard/metrics");
+const { buildRoutineEventValues } = require("./routines/generation");
 const {
   renderAuthPage,
   renderDashboardPage,
@@ -19,6 +20,9 @@ const {
   renderEventFormPage,
   renderEventDetailPage,
   renderEventDeleteConfirmationPage,
+  renderRoutineListPage,
+  renderRoutineFormPage,
+  renderRoutineDeleteConfirmationPage,
 } = require("./views/pages");
 
 const app = express();
@@ -256,10 +260,12 @@ function parseEventForm(form, availableCategories) {
   if (!category) errors.categoryId = "Please choose a category.";
   if (!date) errors.date = "Please choose a date.";
   else if (!isValidEventDate(date)) errors.date = "Please choose a valid date.";
-  if (!startTime) errors.startTime = "Please add a start time.";
-  else if (parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
-  if (!endTime) errors.endTime = "Please add an end time.";
-  else if (parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+  if (Boolean(startTime) !== Boolean(endTime)) {
+    if (!startTime) errors.startTime = "Add both times, or leave both blank.";
+    if (!endTime) errors.endTime = "Add both times, or leave both blank.";
+  }
+  if (startTime && parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (endTime && parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
 
   const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
   const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
@@ -284,8 +290,8 @@ function parseEventForm(form, availableCategories) {
       title,
       categoryId,
       date,
-      startTime,
-      endTime,
+      startTime: startTime || null,
+      endTime: endTime || null,
       notes: form.notes.trim() || null,
       distanceMi: distance.value,
       proteinG: protein.value,
@@ -317,6 +323,136 @@ function sendEventNotFound(res) {
 
 function isEventConstraintError(error) {
   return ["22003", "22007", "22P02", "23502", "23503", "23514"].includes(error.code);
+}
+
+function routineFormValues(body = {}, existing = {}, submitted = false) {
+  const value = (key, fallback = "") =>
+    typeof body[key] === "string"
+      ? body[key]
+      : fallback == null
+        ? ""
+        : String(fallback);
+
+  return {
+    id: existing.id,
+    title: value("title", existing.title),
+    notes: value("notes", existing.notes),
+    categoryId: value("categoryId", existing.categoryId),
+    dayOfWeek: value("dayOfWeek", existing.dayOfWeek),
+    startTime: value("startTime", existing.startTime),
+    endTime: value("endTime", existing.endTime),
+    active: typeof body.active === "string"
+      ? body.active === "true"
+      : submitted
+        ? false
+        : Boolean(existing.active ?? true),
+  };
+}
+
+function parseRoutineForm(form, availableCategories) {
+  const title = form.title.trim();
+  const notes = form.notes.trim();
+  const categoryId = parsePositiveId(form.categoryId);
+  const category = availableCategories.find((item) => item.id === categoryId);
+  const dayOfWeek = /^[0-6]$/.test(form.dayOfWeek) ? Number(form.dayOfWeek) : null;
+  const startTime = form.startTime.trim();
+  const endTime = form.endTime.trim();
+  const errors = {};
+
+  if (!title) errors.title = "Please add a title.";
+  else if (title.length > 180) errors.title = "Please keep the title under 180 characters.";
+  if (notes.length > 2000) errors.notes = "Please keep notes under 2,000 characters.";
+  if (!category) errors.categoryId = "Please choose a category.";
+  if (dayOfWeek === null) errors.dayOfWeek = "Please choose a day.";
+  if (Boolean(startTime) !== Boolean(endTime)) {
+    if (!startTime) errors.startTime = "Add both times, or leave both blank.";
+    if (!endTime) errors.endTime = "Add both times, or leave both blank.";
+  }
+  if (startTime && parseTimeInSeconds(startTime) === null) errors.startTime = "Please enter a valid start time.";
+  if (endTime && parseTimeInSeconds(endTime) === null) errors.endTime = "Please enter a valid end time.";
+
+  const startSeconds = startTime ? parseTimeInSeconds(startTime) : null;
+  const endSeconds = endTime ? parseTimeInSeconds(endTime) : null;
+  if (startSeconds !== null && endSeconds !== null && endSeconds <= startSeconds) {
+    errors.endTime = "End time must be after start time.";
+  }
+
+  if (Object.keys(errors).length) return { errors };
+  return {
+    values: {
+      title,
+      notes: notes || null,
+      categoryId,
+      dayOfWeek,
+      startTime: startTime || null,
+      endTime: endTime || null,
+      active: Boolean(form.active),
+    },
+  };
+}
+
+async function sendRoutineForm(req, res, { mode, routine, error, errors, status = 200, categories: availableCategories }) {
+  const routineCategories = availableCategories || await getEventCategories();
+  const csrfToken = issueCsrfToken(res);
+  return res.status(status).type("html").send(
+    renderRoutineFormPage({
+      mode,
+      routine,
+      categories: routineCategories,
+      email: req.currentUser.email,
+      csrfToken,
+      error,
+      errors,
+    }),
+  );
+}
+
+async function findRoutineForUser(routineId, userId) {
+  const [routine] = await db
+    .select({
+      id: routines.id,
+      userId: routines.userId,
+      categoryId: routines.categoryId,
+      categoryName: categories.name,
+      title: routines.title,
+      notes: routines.notes,
+      dayOfWeek: routines.dayOfWeek,
+      startTime: routines.startTime,
+      endTime: routines.endTime,
+      active: routines.active,
+    })
+    .from(routines)
+    .innerJoin(categories, eq(routines.categoryId, categories.id))
+    .where(and(eq(routines.id, routineId), eq(routines.userId, userId)))
+    .limit(1);
+  return routine || null;
+}
+
+function sendRoutineNotFound(res) {
+  return res.status(404).type("html").send(
+    "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Routine not found · Rhythm</title><body><h1>Routine not found</h1><a href=\"/routines\">Return to your routines</a></body></html>",
+  );
+}
+
+async function generateRoutineEventsForWeek(userId, range) {
+  const activeRoutines = await db
+    .select({
+      id: routines.id,
+      categoryId: routines.categoryId,
+      title: routines.title,
+      notes: routines.notes,
+      dayOfWeek: routines.dayOfWeek,
+      startTime: routines.startTime,
+      endTime: routines.endTime,
+      active: routines.active,
+    })
+    .from(routines)
+    .where(and(eq(routines.userId, userId), eq(routines.active, true)));
+  const generatedEvents = buildRoutineEventValues(userId, activeRoutines, range.days);
+
+  if (generatedEvents.length) {
+    await db.insert(events).values(generatedEvents).onConflictDoNothing();
+  }
 }
 
 app.get("/signup", (req, res) => sendAuthPage(res, { mode: "signup" }));
@@ -401,6 +537,7 @@ app.get("/week", async (req, res, next) => {
       ? req.query.week
       : new Date();
     const range = getCalendarWeekRange(requestedDate);
+    await generateRoutineEventsForWeek(req.currentUser.id, range);
     const weekEvents = await db
       .select({
         ...joinedEventSelection,
@@ -457,6 +594,186 @@ app.get("/dashboard", async (req, res, next) => {
       chartData,
       currentWeekLabel: ranges.weeks[ranges.weeks.length - 1].label,
     }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/routines", async (req, res, next) => {
+  try {
+    const userRoutines = await db
+      .select({
+        id: routines.id,
+        categoryId: routines.categoryId,
+        categoryName: categories.name,
+        title: routines.title,
+        notes: routines.notes,
+        dayOfWeek: routines.dayOfWeek,
+        startTime: routines.startTime,
+        endTime: routines.endTime,
+        active: routines.active,
+      })
+      .from(routines)
+      .innerJoin(categories, eq(routines.categoryId, categories.id))
+      .where(eq(routines.userId, req.currentUser.id))
+      .orderBy(asc(routines.dayOfWeek), asc(routines.startTime), asc(routines.id));
+    const csrfToken = issueCsrfToken(res);
+    const notice = {
+      created: "Your routine was added.",
+      updated: "Your routine was updated.",
+      deleted: "Your routine was deleted. Events already created from it remain in your week.",
+    }[req.query.status];
+    return res.type("html").send(renderRoutineListPage({
+      routines: userRoutines,
+      email: req.currentUser.email,
+      csrfToken,
+      notice,
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/routines/new", async (req, res, next) => {
+  try {
+    return await sendRoutineForm(req, res, { mode: "create", routine: { active: true } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/routines", async (req, res, next) => {
+  const form = routineFormValues(req.body, {}, true);
+  try {
+    const availableCategories = await getEventCategories();
+    if (!csrfMatches(req)) {
+      return await sendRoutineForm(req, res, {
+        mode: "create",
+        routine: form,
+        error: "This form expired. Refresh and try again.",
+        status: 403,
+        categories: availableCategories,
+      });
+    }
+    const parsed = parseRoutineForm(form, availableCategories);
+    if (parsed.errors) {
+      return await sendRoutineForm(req, res, {
+        mode: "create",
+        routine: form,
+        errors: parsed.errors,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
+    await db
+      .insert(routines)
+      .values({ ...parsed.values, userId: req.currentUser.id });
+    return res.redirect(303, `/routines?status=created`);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/routines/:id/edit", async (req, res, next) => {
+  const routineId = parsePositiveId(req.params.id);
+  if (!routineId) return sendRoutineNotFound(res);
+
+  try {
+    const routine = await findRoutineForUser(routineId, req.currentUser.id);
+    if (!routine) return sendRoutineNotFound(res);
+    return await sendRoutineForm(req, res, { mode: "edit", routine });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/routines/:id/edit", async (req, res, next) => {
+  const routineId = parsePositiveId(req.params.id);
+  if (!routineId) return sendRoutineNotFound(res);
+
+  try {
+    const existing = await findRoutineForUser(routineId, req.currentUser.id);
+    if (!existing) return sendRoutineNotFound(res);
+    const availableCategories = await getEventCategories();
+    const form = routineFormValues(req.body, existing, true);
+    if (!csrfMatches(req)) {
+      return await sendRoutineForm(req, res, {
+        mode: "edit",
+        routine: form,
+        error: "This form expired. Refresh and try again.",
+        status: 403,
+        categories: availableCategories,
+      });
+    }
+    const parsed = parseRoutineForm(form, availableCategories);
+    if (parsed.errors) {
+      return await sendRoutineForm(req, res, {
+        mode: "edit",
+        routine: form,
+        errors: parsed.errors,
+        status: 400,
+        categories: availableCategories,
+      });
+    }
+    const [updated] = await db
+      .update(routines)
+      .set(parsed.values)
+      .where(and(eq(routines.id, routineId), eq(routines.userId, req.currentUser.id)))
+      .returning({ id: routines.id });
+    if (!updated) return sendRoutineNotFound(res);
+    return res.redirect(303, "/routines?status=updated");
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/routines/:id/delete", async (req, res, next) => {
+  const routineId = parsePositiveId(req.params.id);
+  if (!routineId) return sendRoutineNotFound(res);
+
+  try {
+    const routine = await findRoutineForUser(routineId, req.currentUser.id);
+    if (!routine) return sendRoutineNotFound(res);
+    const csrfToken = issueCsrfToken(res);
+    return res.type("html").send(
+      renderRoutineDeleteConfirmationPage({ routine, email: req.currentUser.email, csrfToken }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/routines/:id/delete", async (req, res, next) => {
+  const routineId = parsePositiveId(req.params.id);
+  if (!routineId) return sendRoutineNotFound(res);
+  if (!csrfMatches(req) || req.body.confirmDelete !== "yes") {
+    return res.status(403).type("html").send(
+      "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Confirmation required · Rhythm</title><body><h1>Please confirm this action</h1><a href=\"/routines\">Return to your routines</a></body></html>",
+    );
+  }
+
+  try {
+    const deleted = await db.transaction(async (tx) => {
+      const [ownedRoutine] = await tx
+        .select({ id: routines.id })
+        .from(routines)
+        .where(and(eq(routines.id, routineId), eq(routines.userId, req.currentUser.id)))
+        .for("update")
+        .limit(1);
+      if (!ownedRoutine) return false;
+
+      await tx
+        .update(events)
+        .set({ routineId: null })
+        .where(and(eq(events.userId, req.currentUser.id), eq(events.routineId, routineId)));
+      const [deletedRoutine] = await tx
+        .delete(routines)
+        .where(and(eq(routines.id, routineId), eq(routines.userId, req.currentUser.id)))
+        .returning({ id: routines.id });
+      return Boolean(deletedRoutine);
+    });
+    if (!deleted) return sendRoutineNotFound(res);
+    return res.redirect(303, "/routines?status=deleted");
   } catch (error) {
     return next(error);
   }

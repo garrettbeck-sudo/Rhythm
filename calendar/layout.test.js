@@ -51,3 +51,9 @@ test("the calendar day runs from 5 AM to midnight and omits earlier events", () 
   ]);
   assert.equal(layout.some(({ event }) => event.id === 5), false);
 });
+
+test("untimed events are kept out of the hourly time grid", () => {
+  assert.deepEqual(layoutCalendarEvents([
+    { id: 1, startTime: null, endTime: null },
+  ]), []);
+});

@@ -112,6 +112,20 @@ function formatCalendarTime(value) {
   return `${displayHour}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
+function isUntimedEvent(event) {
+  return event.startTime == null && event.endTime == null;
+}
+
+function formatEventTimeRange(startTime, endTime) {
+  if (startTime == null && endTime == null) return "Any time";
+  return `${escapeHtml(startTime)} <span aria-hidden="true">→</span> ${escapeHtml(endTime)}`;
+}
+
+function formatRoutineTimeRange(startTime, endTime) {
+  if (startTime == null && endTime == null) return "Any time";
+  return `${formatCalendarTime(startTime)}–${formatCalendarTime(endTime)}`;
+}
+
 function renderCalendarEvent(item, csrfToken) {
   const { event } = item;
   const color = safeCategoryColor(event.categoryColor);
@@ -129,24 +143,49 @@ function renderCalendarEvent(item, csrfToken) {
   </article>`;
 }
 
+function renderCalendarAllDayEvent(event, csrfToken) {
+  const color = safeCategoryColor(event.categoryColor);
+  const isHealthyPlannedItem = event.planned === true && ["Workout", "Meal", "Habit"].includes(event.categoryName);
+  const completionControl = isHealthyPlannedItem ? renderCompletionControl(event, csrfToken) : "";
+  const completedClass = event.completed ? " event-completed" : "";
+  const unplannedClass = event.planned === false ? " calendar-event-unplanned" : "";
+  return `<article class="calendar-event calendar-all-day-event${completedClass}${unplannedClass}" style="--event-color:${color}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+    <a class="calendar-event-link" href="/events/${encodeURIComponent(event.id)}" title="${escapeHtml(event.title)}">
+      <span class="calendar-event-title">${escapeHtml(event.title)}</span>
+      ${renderUnplannedLabel(event)}
+    </a>
+    ${completionControl ? `<span class="calendar-event-check">${completionControl}</span>` : ""}
+  </article>`;
+}
+
 function formatCalendarHour(hour) {
   const displayHour = hour % 12 || 12;
   return `${displayHour} ${hour < 12 ? "AM" : "PM"}`;
 }
 
 function renderWeekPage({ email, csrfToken, events = [], range }) {
-  const eventsByDate = new Map(range.days.map((day) => [day.date, []]));
+  const timedEventsByDate = new Map(range.days.map((day) => [day.date, []]));
+  const allDayEventsByDate = new Map(range.days.map((day) => [day.date, []]));
   for (const event of events) {
-    if (eventsByDate.has(event.date)) eventsByDate.get(event.date).push(event);
+    if (!timedEventsByDate.has(event.date)) continue;
+    const eventDate = isUntimedEvent(event) ? allDayEventsByDate : timedEventsByDate;
+    eventDate.get(event.date).push(event);
   }
+  const hasAllDayEvents = [...allDayEventsByDate.values()].some((dayEvents) => dayEvents.length > 0);
   const dayHeaders = range.days.map((day) => `<div class="calendar-day-header${day.isToday ? " calendar-today" : ""}" role="columnheader">
     <span>${escapeHtml(day.dayName)}</span><strong>${day.dayNumber}</strong>
   </div>`).join("");
+  const allDayRow = hasAllDayEvents ? `<div class="calendar-all-day-row" role="row">
+    <div class="calendar-all-day-label" role="rowheader">ANY TIME</div>
+    ${range.days.map((day) => `<section class="calendar-all-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} untimed events">
+      ${allDayEventsByDate.get(day.date).map((event) => renderCalendarAllDayEvent(event, csrfToken)).join("")}
+    </section>`).join("")}
+  </div>` : "";
   const calendarHours = Array.from({ length: 19 }, (_, index) => index + 5);
   const timeLabels = calendarHours.map((hour) => `<span class="calendar-hour-label">${formatCalendarHour(hour)}</span>`).join("") +
     `<span class="calendar-hour-label calendar-midnight-end">${formatCalendarHour(0)}</span>`;
   const dayColumns = range.days.map((day) => `<section class="calendar-day-column${day.isToday ? " calendar-today" : ""}" role="gridcell" aria-label="${escapeHtml(day.dayName)} ${day.date}">
-    ${layoutCalendarEvents(eventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
+    ${layoutCalendarEvents(timedEventsByDate.get(day.date)).map((item) => renderCalendarEvent(item, csrfToken)).join("")}
   </section>`).join("");
   const content = `<main class="week-shell event-shell calendar-shell">
     ${eventHeader({ email, csrfToken })}
@@ -169,6 +208,7 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
             <div class="calendar-time-heading" role="columnheader">TIME</div>
             ${dayHeaders}
           </div>
+          ${allDayRow}
           <div class="calendar-grid-body">
             <aside class="calendar-time-axis" aria-hidden="true">${timeLabels}</aside>
             <div class="calendar-day-columns">${dayColumns}</div>
@@ -183,14 +223,14 @@ function renderWeekPage({ email, csrfToken, events = [], range }) {
     title: "My Week",
     bodyClass: "page-events page-calendar",
     content,
-    scripts: ["/assets/events.js", "/assets/calendar.js"],
+    scripts: ["/assets/events.js?v=2", "/assets/calendar.js"],
   });
 }
 
 function eventHeader({ email, csrfToken }) {
   return `<header class="week-header event-header">
     ${brandMark()}
-    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a><a href="/starred">Starred</a><a href="/dashboard">Dashboard</a></nav>
+    <nav class="event-nav" aria-label="Event navigation"><a href="/week">My Week</a><a href="/events">Events</a><a href="/routines">Routines</a><a href="/starred">Starred</a><a href="/dashboard">Dashboard</a></nav>
     <div class="account-actions">
       <span class="account-email">${escapeHtml(email)}</span>
       <form method="post" action="/logout" class="logout-form">
@@ -364,7 +404,7 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
           <span class="event-row-title">${escapeHtml(event.title)}</span>
           <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}${renderUnplannedLabel(event)}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
         </a>
-        <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
+        <span class="event-row-time">${formatEventTimeRange(event.startTime, event.endTime)}</span>
         ${renderStarControl(event, csrfToken, "event-star-button-list")}
         <a class="event-row-arrow" href="/events/${encodeURIComponent(event.id)}" aria-label="Open ${escapeHtml(event.title)}">↗</a>
         <span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span>
@@ -417,7 +457,144 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
     </section>
     <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: pageTitle, bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
+  return shell({ title: pageTitle, bodyClass: "page-events", content, scripts: ["/assets/events.js?v=2"] });
+}
+
+function renderRoutineListPage({ routines = [], email, csrfToken, notice }) {
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const rows = routines.map((routine) => `<article class="event-row routine-row${routine.active ? "" : " routine-row-inactive"}">
+    <div class="routine-row-main">
+      <strong class="routine-row-title">${escapeHtml(routine.title)}</strong>
+      <span class="routine-row-meta">${escapeHtml(routine.categoryName)} <span aria-hidden="true">·</span> ${days[routine.dayOfWeek]} <span aria-hidden="true">·</span> ${formatRoutineTimeRange(routine.startTime, routine.endTime)}</span>
+      ${routine.notes ? `<span class="routine-row-notes">${escapeHtml(routine.notes)}</span>` : ""}
+    </div>
+    <span class="routine-state${routine.active ? " routine-state-active" : ""}">${routine.active ? "Active" : "Paused"}</span>
+    <div class="routine-row-actions">
+      <a class="button button-secondary" href="/routines/${encodeURIComponent(routine.id)}/edit">Edit</a>
+      <a class="button button-danger-quiet" href="/routines/${encodeURIComponent(routine.id)}/delete">Delete</a>
+    </div>
+  </article>`).join("");
+  const content = `<main class="week-shell event-shell routine-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-page-intro">
+      <div>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> SMALL THINGS, REPEATED</span>
+        <h1>Routines<span class="title-period">.</span></h1>
+        <p>Set a weekly rhythm once. Each week gets its own events when you open My Week.</p>
+      </div>
+      <div class="event-create-actions">
+        <a class="button button-primary" href="/routines/new">Add a routine <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+    ${notice ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
+    <section class="event-list-panel routine-list-panel" aria-label="Your routines">
+      <div class="event-list-heading"><span>YOUR WEEKLY ROUTINES</span><span>${routines.length} ${routines.length === 1 ? "routine" : "routines"}</span></div>
+      <div class="event-list">${rows || `<div class="event-empty routine-empty"><span class="event-empty-mark" aria-hidden="true"></span><span class="eyebrow">A REPEATABLE START</span><h2>Make one good thing a routine.</h2><p>Choose a day and time for something you want to repeat each week.</p><a class="button button-primary" href="/routines/new">Add your first routine <span aria-hidden="true">↗</span></a></div>`}</div>
+    </section>
+    <footer class="week-footer"><a href="/week">← Back to My Week</a><span>One thing at a time.</span></footer>
+  </main>`;
+  return shell({ title: "Routines", bodyClass: "page-events", content });
+}
+
+function renderRoutineFormPage({ mode, routine = {}, categories = [], email, csrfToken, error, errors = {} }) {
+  const isEdit = mode === "edit";
+  const action = isEdit ? `/routines/${encodeURIComponent(routine.id)}/edit` : "/routines";
+  const safe = (value) => escapeHtml(value);
+  const fieldError = (name) => {
+    const message = typeof errors[name] === "string" ? errors[name] : "";
+    return `<span class="field-error" id="routine-${name}-error" role="status" aria-live="polite"${message ? "" : " hidden"}>${safe(message)}</span>`;
+  };
+  const describedBy = (name) => ` aria-describedby="routine-${name}-error"${errors[name] ? ' aria-invalid="true"' : ""}`;
+  const categoryOptions = categories.map((category) => {
+    const selected = String(category.id) === String(routine.categoryId) ? " selected" : "";
+    return `<option value="${safe(category.id)}"${selected}>${safe(category.name)}</option>`;
+  }).join("");
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayOptions = dayNames.map((day, index) =>
+    `<option value="${index}"${String(index) === String(routine.dayOfWeek) ? " selected" : ""}>${day}</option>`,
+  ).join("");
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-form-layout">
+      <div class="event-form-aside">
+        <a class="back-link" href="/routines">← Back to routines</a>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> ${isEdit ? "A SMALL ADJUSTMENT" : "MAKE ROOM FOR A RHYTHM"}</span>
+        <h1>${isEdit ? "Shape your routine" : "Start a routine"}<span class="title-period">.</span></h1>
+        <p>${isEdit ? "Saved events stay as they are. New weeks use these updated details." : "Pick a day and time. New events are created when you open a week."}</p>
+      </div>
+      <section class="event-form-card" aria-label="${isEdit ? "Edit routine" : "New routine"}">
+        <div class="event-form-card-heading"><span class="eyebrow">${isEdit ? "EDIT THE DETAILS" : "START WITH THE DETAILS"}</span><h2>${isEdit ? "A plan you can repeat" : "What would you like to repeat?"}</h2></div>
+        ${error ? `<div class="message message-error" role="alert">${safe(error)}</div>` : ""}
+        <form class="event-form" method="post" action="${action}">
+          <input type="hidden" name="_csrf" value="${safe(csrfToken)}">
+          <label for="routine-title">Routine title</label>
+          <input id="routine-title" name="title" type="text" maxlength="180" placeholder="e.g. Rower intervals" value="${safe(routine.title)}" required${describedBy("title")}>
+          ${fieldError("title")}
+
+          <label for="routine-category">Category</label>
+          <select id="routine-category" name="categoryId" required${describedBy("categoryId")}>
+            <option value="">Choose a category</option>${categoryOptions}
+          </select>
+          ${fieldError("categoryId")}
+
+          <label for="routine-day">Day of week</label>
+          <select id="routine-day" name="dayOfWeek" required${describedBy("dayOfWeek")}>
+            <option value="">Choose a day</option>${dayOptions}
+          </select>
+          ${fieldError("dayOfWeek")}
+
+          <div class="event-time-fields">
+            <div><label for="routine-start">Starts</label><input id="routine-start" name="startTime" type="time" value="${safe(routine.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
+            <div><label for="routine-end">Ends</label><input id="routine-end" name="endTime" type="time" value="${safe(routine.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
+          </div>
+          <p class="routine-time-hint">Leave both blank to create a routine without a scheduled time.</p>
+
+          <label for="routine-notes">Notes <span class="field-unit">optional</span></label>
+          <textarea id="routine-notes" name="notes" rows="4" maxlength="2000" placeholder="Anything helpful to remember for this routine"${describedBy("notes")}>${safe(routine.notes)}</textarea>
+          ${fieldError("notes")}
+
+          <div class="routine-active-field">
+            <input id="routine-active" name="active" type="checkbox" value="true"${routine.active ? " checked" : ""}>
+            <label for="routine-active">Repeat this routine each week</label>
+          </div>
+          <div class="event-form-actions">
+            <a class="button button-secondary" href="/routines">Cancel</a>
+            <button class="button button-primary" type="submit">${isEdit ? "Save changes" : "Add routine"} <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </section>
+    </section>
+    <footer class="week-footer"><span>Your plans are personal. Your space stays yours.</span><span>Rhythm</span></footer>
+  </main>`;
+  return shell({ title: isEdit ? "Edit routine" : "New routine", bodyClass: "page-events", content });
+}
+
+function renderRoutineDeleteConfirmationPage({ routine = {}, email, csrfToken }) {
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const content = `<main class="week-shell event-shell">
+    ${eventHeader({ email, csrfToken })}
+    <section class="event-delete-wrap routine-delete-wrap">
+      <a class="back-link" href="/routines/${encodeURIComponent(routine.id)}/edit">← Keep this routine</a>
+      <div class="event-delete-card">
+        <span class="delete-mark" aria-hidden="true">!</span>
+        <span class="eyebrow">A MOMENT BEFORE YOU LET GO</span>
+        <h1>Delete this routine?</h1>
+        <p class="delete-copy">This stops new weekly events from being created. Events already created from this routine will remain in your week.</p>
+        <div class="routine-delete-summary">
+          <strong>${escapeHtml(routine.title)}</strong>
+          <span>${escapeHtml(routine.categoryName)} · ${days[routine.dayOfWeek]} · ${formatRoutineTimeRange(routine.startTime, routine.endTime)}</span>
+        </div>
+        <form method="post" action="/routines/${encodeURIComponent(routine.id)}/delete" class="delete-actions">
+          <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
+          <input type="hidden" name="confirmDelete" value="yes">
+          <a class="button button-secondary" href="/routines">Cancel, keep it</a>
+          <button class="button button-danger" type="submit">Yes, delete routine</button>
+        </form>
+      </div>
+    </section>
+    <footer class="week-footer"><span>Your plans are personal. Your space stays yours.</span><span>Rhythm</span></footer>
+  </main>`;
+  return shell({ title: "Delete routine", bodyClass: "page-events", content });
 }
 
 function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
@@ -470,9 +647,10 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
           ${fieldError("date")}
 
           <div class="event-time-fields">
-            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}" required${describedBy("startTime")}>${fieldError("startTime")}</div>
-            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}" required${describedBy("endTime")}>${fieldError("endTime")}</div>
+            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
+            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
           </div>
+          <p class="event-time-hint">Leave both blank to place this event in the Any Time row.</p>
 
           <div class="event-category-field" data-category-field="Workout" data-field-name="distanceMi"${selectedCategoryName === "Workout" ? "" : " hidden"}>
             <label for="event-distance">Distance <span class="field-unit">miles</span></label>
@@ -498,7 +676,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
     title: isEdit ? "Edit event" : isUnplanned ? "Log unplanned event" : "New event",
     bodyClass: "page-events",
     content,
-    scripts: ["/assets/events.js"],
+    scripts: ["/assets/events.js?v=2"],
   });
 }
 
@@ -521,7 +699,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
         ${completionControl ? `<div class="event-detail-completion">${completionControl}<span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span></div>` : ""}
         <div class="event-detail-schedule">
           <div class="schedule-icon" aria-hidden="true"></div>
-          <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span></div>
+           <div><span class="detail-label">WHEN</span><strong>${formatEventDate(event.date)}</strong><span class="detail-time">${formatEventTimeRange(event.startTime, event.endTime)}</span></div>
         </div>
         ${optionalDetails ? `<div class="event-detail-extras">${optionalDetails}</div>` : ""}
         ${event.notes ? `<div class="event-notes"><span class="detail-label">A NOTE TO YOURSELF</span><p>${escapeHtml(event.notes)}</p></div>` : ""}
@@ -534,7 +712,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     </section>
     <footer class="week-footer"><span>Rhythm is here for the whole you.</span><span>One thing at a time.</span></footer>
   </main>`;
-  return shell({ title: event.title || "Event details", bodyClass: "page-events", content, scripts: ["/assets/events.js"] });
+  return shell({ title: event.title || "Event details", bodyClass: "page-events", content, scripts: ["/assets/events.js?v=2"] });
 }
 
 function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
@@ -548,7 +726,7 @@ function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
         <span class="eyebrow">A MOMENT BEFORE YOU LET GO</span>
         <h1>Are you sure?</h1>
         <p class="delete-copy">This will remove <strong>${escapeHtml(event.title)}</strong> from your plans. You won't be able to undo this.</p>
-        <div class="delete-event-summary${unplannedClass}"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${escapeHtml(event.startTime)}–${escapeHtml(event.endTime)}</small></span>${renderUnplannedLabel(event)}</div>
+         <div class="delete-event-summary${unplannedClass}"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${formatEventTimeRange(event.startTime, event.endTime)}</small></span>${renderUnplannedLabel(event)}</div>
         <form method="post" action="/events/${encodeURIComponent(event.id)}/delete" class="delete-actions">
           <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
           <input type="hidden" name="confirmDelete" value="yes">
@@ -570,4 +748,7 @@ module.exports = {
   renderEventFormPage,
   renderEventDetailPage,
   renderEventDeleteConfirmationPage,
+  renderRoutineListPage,
+  renderRoutineFormPage,
+  renderRoutineDeleteConfirmationPage,
 };
