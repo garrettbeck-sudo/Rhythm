@@ -252,7 +252,14 @@ a { color: inherit; }
   letter-spacing: -.055em;
 }
 .event-page-intro p, .event-form-aside > p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.75; }
+.event-create-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.event-create-actions .button { white-space: nowrap; }
 .event-create-button { flex: 0 0 auto; }
+.event-status-label { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: 4px 8px; border: 1px solid #dbc5a4; border-radius: 99px; color: #806c4d; background: #fbf4e9; font-size: 8px; font-weight: 700; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
+.event-unplanned.event-row { margin: 8px 0; padding: 14px 12px; border: 1px dashed #b4c4ad; border-radius: 12px; }
+.event-unplanned.event-detail-card,
+.event-unplanned.event-form-card,
+.event-unplanned.delete-event-summary { border: 1px dashed #b4c4ad; }
 .event-list-panel {
   margin: 0 0 20px;
   padding: 25px 32px 13px;
@@ -282,6 +289,7 @@ a { color: inherit; }
 .event-completion-input:checked + .event-completion-mark, .event-completion-static .event-completion-mark { color: #fffdf6; border-color: var(--green-dark); background: var(--green-dark); }
 .event-completion-input:checked + .event-completion-mark { transform: scale(1.03); }
 .event-completion-input:focus-visible + .event-completion-mark { outline: 3px solid rgba(99, 140, 106, .38); outline-offset: 3px; }
+.event-completion-static { cursor: default; }
 .event-completion-label { white-space: nowrap; }
 .event-color-mark { width: 4px; height: 39px; flex: 0 0 auto; border-radius: 5px; background: var(--event-color, var(--green)); }
 .event-row-main { display: flex; flex: 1; flex-direction: column; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
@@ -351,6 +359,7 @@ a { color: inherit; }
 .event-detail-wrap > .back-link, .event-delete-wrap > .back-link { margin-bottom: 20px; }
 .event-detail-card { padding: clamp(26px, 5vw, 48px); border: 1px solid #e0e7dc; border-radius: 19px; background: rgba(251, 252, 248, .82); box-shadow: 0 18px 60px rgba(59, 78, 57, .04); }
 .event-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.event-detail-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .category-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--event-color) 26%, #e0e7dc); border-radius: 99px; color: #647366; background: color-mix(in srgb, var(--event-color) 9%, #fbfcf8); font-size: 10px; }
 .category-pill > span { width: 7px; height: 7px; border-radius: 50%; background: var(--event-color); }
 .event-detail-id { color: #a1aca1; font-size: 9px; letter-spacing: .12em; }
@@ -390,7 +399,7 @@ a { color: inherit; }
 .delete-copy strong { color: #526254; }
 .delete-event-summary { display: flex; align-items: center; gap: 13px; max-width: 390px; margin: 25px auto 28px; padding: 15px 17px; border: 1px solid #e7ebe3; border-radius: 11px; background: #f6f8f2; text-align: left; }
 .delete-event-summary .event-color-mark { height: 34px; }
-.delete-event-summary > span:last-child { display: flex; flex-direction: column; gap: 5px; }
+.delete-event-summary > span:nth-child(2) { display: flex; flex-direction: column; gap: 5px; }
 .delete-event-summary strong { color: #566558; font: 500 16px var(--display); }
 .delete-event-summary small { color: #89958a; font-size: 10px; }
 .delete-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
@@ -460,7 +469,8 @@ a { color: inherit; }
   .event-page-intro { min-height: 210px; align-items: flex-start; flex-direction: column; justify-content: center; gap: 18px; padding: 29px 3% 24px; }
   .event-page-intro h1 { margin: 13px 0 8px; font-size: clamp(48px, 13vw, 66px); }
   .event-page-intro p { font-size: 12px; }
-  .event-create-button { min-height: 42px; }
+  .event-create-actions { width: 100%; flex-wrap: wrap; }
+  .event-create-actions .button { min-height: 42px; }
   .event-list-panel { padding: 20px 17px 9px; border-radius: 15px; }
   .event-row { min-height: 78px; gap: 11px; }
   .event-row-title { font-size: 17px; }

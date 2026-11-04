@@ -209,18 +209,23 @@ function renderCompletionControl(event, csrfToken, withLabel = false) {
   </label>`;
 }
 
+function renderUnplannedLabel(event) {
+  return event.planned === false ? '<span class="event-status-label event-status-unplanned">Unplanned</span>' : "";
+}
+
 function renderEventListPage({ events = [], email, csrfToken, notice }) {
   const sortedEvents = [...events].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
   const rows = sortedEvents.length
     ? `<div class="event-list" role="list">${sortedEvents.map((event) => {
       const color = safeCategoryColor(event.categoryColor);
       const completedClass = event.completed ? " event-completed" : "";
-      return `<div class="event-row${completedClass}" role="listitem" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+      const unplannedClass = event.planned === false ? " event-unplanned" : "";
+      return `<div class="event-row${completedClass}${unplannedClass}" role="listitem" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
         ${renderCompletionControl(event, csrfToken)}
         <span class="event-color-mark" style="--event-color:${color}" aria-hidden="true"></span>
         <a class="event-row-main" href="/events/${encodeURIComponent(event.id)}">
           <span class="event-row-title">${escapeHtml(event.title)}</span>
-          <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
+          <span class="event-row-meta">${escapeHtml(event.categoryName || "Event")}${renderUnplannedLabel(event)}<span class="meta-divider">·</span>${formatEventDate(event.date)}</span>
         </a>
         <span class="event-row-time">${escapeHtml(event.startTime)} <span aria-hidden="true">→</span> ${escapeHtml(event.endTime)}</span>
         <a class="event-row-arrow" href="/events/${encodeURIComponent(event.id)}" aria-label="Open ${escapeHtml(event.title)}">↗</a>
@@ -242,7 +247,10 @@ function renderEventListPage({ events = [], email, csrfToken, notice }) {
         <h1>Your events<span class="title-period">.</span></h1>
         <p>All the pieces you're making room for, in one place.</p>
       </div>
-      <a class="button button-primary event-create-button" href="/events/new">Add an event <span aria-hidden="true">↗</span></a>
+      <div class="event-create-actions">
+        <a class="button button-secondary" href="/events/new/unplanned">Log unplanned <span aria-hidden="true">↗</span></a>
+        <a class="button button-primary event-create-button" href="/events/new">Add an event <span aria-hidden="true">↗</span></a>
+      </div>
     </section>
     ${notice ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
     <section class="event-list-panel" aria-label="Your events">
@@ -256,7 +264,13 @@ function renderEventListPage({ events = [], email, csrfToken, notice }) {
 
 function renderEventFormPage({ mode, event = {}, categories = [], email, csrfToken, error, errors = {} }) {
   const isEdit = mode === "edit";
-  const action = isEdit ? `/events/${encodeURIComponent(event.id)}/edit` : "/events";
+  const isUnplanned = mode === "unplanned";
+  const isUnplannedEvent = isUnplanned || (isEdit && event.planned === false);
+  const action = isEdit
+    ? `/events/${encodeURIComponent(event.id)}/edit`
+    : isUnplanned
+      ? "/events/unplanned"
+      : "/events";
   const safe = (value) => escapeHtml(value);
   const fieldError = (name) => {
     const message = typeof errors[name] === "string" ? errors[name] : "";
@@ -274,12 +288,12 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
       <div class="event-form-aside">
         <a class="back-link" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">← ${isEdit ? "Back to event" : "All events"}</a>
         <span class="eyebrow"><span class="eyebrow-dot"></span> ${isEdit ? "A SMALL ADJUSTMENT" : "MAKE A LITTLE SPACE"}</span>
-        <h1>${isEdit ? "Shape your plan" : "Add to your week"}<span class="title-period">.</span></h1>
-        <p>${isEdit ? "Plans can change. Give this one the shape it needs now." : "Give something that matters a place in your week."}</p>
+        <h1>${isEdit ? "Shape your plan" : isUnplanned ? "Log what happened" : "Add to your week"}<span class="title-period">.</span></h1>
+        <p>${isEdit ? "Plans can change. Give this one the shape it needs now." : isUnplanned ? "Capture something that happened outside your plan. It will be saved as completed." : "Give something that matters a place in your week."}</p>
         <div class="form-aside-note"><span class="reminder-dot"></span><span>Keep it simple. You can always revisit this.</span></div>
       </div>
-      <section class="event-form-card" aria-label="${isEdit ? "Edit event" : "New event"}">
-        <div class="event-form-card-heading"><span class="eyebrow">${isEdit ? "EDIT THE DETAILS" : "START WITH THE DETAILS"}</span><h2>${isEdit ? "A plan in progress" : "What's on your mind?"}</h2></div>
+      <section class="event-form-card${isUnplannedEvent ? " event-unplanned" : ""}" aria-label="${isEdit ? "Edit event" : isUnplanned ? "Log unplanned event" : "New event"}">
+        <div class="event-form-card-heading"><span class="eyebrow">${isEdit ? "EDIT THE DETAILS" : isUnplanned ? "LOG AN UNPLANNED EVENT" : "START WITH THE DETAILS"}</span><h2>${isUnplannedEvent ? "What happened?" : isEdit ? "A plan in progress" : "What's on your mind?"}</h2>${isUnplannedEvent ? renderUnplannedLabel({ planned: false }) : ""}</div>
         ${error ? `<div class="message message-error" role="alert">${safe(error)}</div>` : ""}
         <form class="event-form" method="post" action="${action}" data-event-form>
           <input type="hidden" name="_csrf" value="${safe(csrfToken)}">
@@ -315,7 +329,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
           <textarea id="event-notes" name="notes" rows="4" maxlength="2000" placeholder="Anything you want to remember about this plan">${safe(event.notes)}</textarea>
           <div class="event-form-actions">
             <a class="button button-secondary" href="${isEdit ? `/events/${encodeURIComponent(event.id)}` : "/events"}">Cancel</a>
-            <button class="button button-primary" type="submit">${isEdit ? "Save changes" : "Add event"} <span aria-hidden="true">↗</span></button>
+            <button class="button button-primary" type="submit">${isEdit ? "Save changes" : isUnplanned ? "Save unplanned event" : "Add event"} <span aria-hidden="true">↗</span></button>
           </div>
         </form>
       </section>
@@ -323,7 +337,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
     <footer class="week-footer"><span>Your plans are personal. Your space stays yours.</span><span>Rhythm</span></footer>
   </main>`;
   return shell({
-    title: isEdit ? "Edit event" : "New event",
+    title: isEdit ? "Edit event" : isUnplanned ? "Log unplanned event" : "New event",
     bodyClass: "page-events",
     content,
     scripts: ["/assets/events.js"],
@@ -333,6 +347,7 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
 function renderEventDetailPage({ event = {}, email, csrfToken }) {
   const color = safeCategoryColor(event.categoryColor);
   const completedClass = event.completed ? " event-completed" : "";
+  const unplannedClass = event.planned === false ? " event-unplanned" : "";
   const completionControl = renderCompletionControl(event, csrfToken, true);
   const optionalDetails = [
     event.distanceMi != null && event.distanceMi !== "" ? `<div class="detail-extra"><span>Distance</span><strong>${escapeHtml(event.distanceMi)} mi</strong></div>` : "",
@@ -342,8 +357,8 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
     ${eventHeader({ email, csrfToken })}
     <section class="event-detail-wrap">
       <a class="back-link" href="/events">← All events</a>
-      <article class="event-detail-card${completedClass}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
-        <div class="event-detail-top"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span><span class="event-detail-id">PLAN ${escapeHtml(event.id)}</span></div>
+      <article class="event-detail-card${completedClass}${unplannedClass}" data-event-item data-event-title="${escapeHtml(event.title)}" data-completed="${Boolean(event.completed)}">
+        <div class="event-detail-top"><div class="event-detail-badges"><span class="category-pill" style="--event-color:${color}"><span></span>${escapeHtml(event.categoryName || "Event")}</span>${renderUnplannedLabel(event)}</div><span class="event-detail-id">${event.planned === false ? `EVENT ${escapeHtml(event.id)}` : `PLAN ${escapeHtml(event.id)}`}</span></div>
         <h1>${escapeHtml(event.title)}<span class="title-period">.</span></h1>
         ${completionControl ? `<div class="event-detail-completion">${completionControl}<span class="event-toggle-status" data-event-toggle-status role="status" aria-live="polite"></span></div>` : ""}
         <div class="event-detail-schedule">
@@ -365,6 +380,7 @@ function renderEventDetailPage({ event = {}, email, csrfToken }) {
 }
 
 function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
+  const unplannedClass = event.planned === false ? " event-unplanned" : "";
   const content = `<main class="week-shell event-shell">
     ${eventHeader({ email, csrfToken })}
     <section class="event-delete-wrap">
@@ -374,7 +390,7 @@ function renderEventDeleteConfirmationPage({ event = {}, email, csrfToken }) {
         <span class="eyebrow">A MOMENT BEFORE YOU LET GO</span>
         <h1>Are you sure?</h1>
         <p class="delete-copy">This will remove <strong>${escapeHtml(event.title)}</strong> from your plans. You won't be able to undo this.</p>
-        <div class="delete-event-summary"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${escapeHtml(event.startTime)}–${escapeHtml(event.endTime)}</small></span></div>
+        <div class="delete-event-summary${unplannedClass}"><span class="event-color-mark" style="--event-color:${safeCategoryColor(event.categoryColor)}" aria-hidden="true"></span><span><strong>${escapeHtml(event.categoryName || "Event")}</strong><small>${formatEventDate(event.date)} · ${escapeHtml(event.startTime)}–${escapeHtml(event.endTime)}</small></span>${renderUnplannedLabel(event)}</div>
         <form method="post" action="/events/${encodeURIComponent(event.id)}/delete" class="delete-actions">
           <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
           <input type="hidden" name="confirmDelete" value="yes">
