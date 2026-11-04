@@ -266,24 +266,36 @@ a { color: inherit; }
 .event-list { border-top: 1px solid #e8ede5; }
 .event-row {
   min-height: 83px;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 17px;
   padding: 14px 4px;
   border-bottom: 1px solid #e8ede5;
   color: inherit;
-  text-decoration: none;
   transition: padding .18s ease, background .18s ease;
 }
 .event-row:hover { padding-right: 12px; padding-left: 11px; background: rgba(232, 239, 228, .4); }
+.event-completion-control { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; cursor: pointer; color: #738176; font-size: 10px; }
+.event-completion-input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.event-completion-mark { width: 20px; height: 20px; display: inline-grid; place-items: center; border: 1px solid #b7c5b5; border-radius: 6px; color: transparent; background: rgba(255,255,255,.58); font-size: 13px; font-weight: 700; line-height: 1; transition: color .16s ease, border-color .16s ease, background .16s ease, transform .16s ease; }
+.event-completion-input:checked + .event-completion-mark, .event-completion-static .event-completion-mark { color: #fffdf6; border-color: var(--green-dark); background: var(--green-dark); }
+.event-completion-input:checked + .event-completion-mark { transform: scale(1.03); }
+.event-completion-input:focus-visible + .event-completion-mark { outline: 3px solid rgba(99, 140, 106, .38); outline-offset: 3px; }
+.event-completion-label { white-space: nowrap; }
 .event-color-mark { width: 4px; height: 39px; flex: 0 0 auto; border-radius: 5px; background: var(--event-color, var(--green)); }
-.event-row-main { display: flex; flex: 1; flex-direction: column; gap: 7px; min-width: 0; }
+.event-row-main { display: flex; flex: 1; flex-direction: column; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.event-row-main:hover .event-row-title { color: var(--green-dark); }
 .event-row-title { overflow: hidden; color: #33463a; font: 500 19px/1.2 var(--display); text-overflow: ellipsis; white-space: nowrap; }
 .event-row-meta { display: flex; align-items: center; gap: 8px; color: #849087; font-size: 10px; }
 .meta-divider { color: #c2cbc0; }
 .event-row-time { flex: 0 0 auto; color: #657469; font-size: 11px; font-variant-numeric: tabular-nums; }
 .event-row-time span { padding: 0 4px; color: #a5b0a4; }
-.event-row-arrow { width: 24px; color: #9cab9b; text-align: right; }
+.event-row-arrow { width: 24px; flex: 0 0 auto; color: #9cab9b; text-align: right; text-decoration: none; }
+.event-toggle-status { flex: 0 0 auto; color: #9a5b49; font-size: 10px; }
+.event-toggle-status:empty { display: none; }
+.event-completed .event-row-title { opacity: .58; text-decoration: line-through; }
+.event-completed .event-row-meta, .event-completed .event-row-time { opacity: .58; }
 .event-empty { min-height: 300px; display: flex; align-items: center; flex-direction: column; justify-content: center; padding: 34px 18px; text-align: center; }
 .event-empty-mark { width: 43px; height: 43px; margin-bottom: 21px; border: 1px solid #d7e3d3; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #d99d75 0 4px, transparent 5px), #edf3e9; }
 .event-empty h2 { max-width: 430px; margin: 13px 0 9px; font: 500 32px/1.13 var(--display); letter-spacing: -.035em; }
@@ -343,6 +355,12 @@ a { color: inherit; }
 .category-pill > span { width: 7px; height: 7px; border-radius: 50%; background: var(--event-color); }
 .event-detail-id { color: #a1aca1; font-size: 9px; letter-spacing: .12em; }
 .event-detail-card h1 { overflow-wrap: anywhere; margin: 26px 0 31px; font-size: clamp(44px, 7vw, 69px); }
+.event-detail-completion { display: flex; align-items: center; gap: 12px; margin: -16px 0 22px; }
+.event-detail-completion .event-completion-mark { width: 22px; height: 22px; }
+.event-detail-card.event-completed h1 { opacity: .58; text-decoration: line-through; }
+.event-detail-card.event-completed .event-detail-schedule,
+.event-detail-card.event-completed .event-detail-extras,
+.event-detail-card.event-completed .event-notes { opacity: .58; }
 .event-detail-schedule { display: flex; align-items: center; gap: 16px; padding: 19px 0; border-top: 1px solid #e8ede5; border-bottom: 1px solid #e8ede5; }
 .schedule-icon { position: relative; width: 43px; height: 43px; flex: 0 0 auto; border: 1px solid #dce7d8; border-radius: 13px; background: #eff4eb; }
 .schedule-icon::before { position: absolute; inset: 11px; content: ""; border: 1px solid #89a283; border-radius: 50%; }
