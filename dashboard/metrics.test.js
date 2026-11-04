@@ -50,6 +50,23 @@ test("current-week completion rate excludes unplanned items while workout and un
   });
 });
 
+test("completion rate is 75% for three of four planned events plus one unplanned event", () => {
+  const ranges = getDashboardDateRanges("2026-11-04");
+  const events = [
+    { date: "2026-11-02", categoryName: "Workout", planned: true, completed: true },
+    { date: "2026-11-03", categoryName: "Meal", planned: true, completed: true },
+    { date: "2026-11-04", categoryName: "Workout", planned: true, completed: true },
+    { date: "2026-11-05", categoryName: "Habit", planned: true, completed: false },
+    { date: "2026-11-06", categoryName: "Meal", planned: false, completed: true },
+  ];
+
+  const stats = calculateCurrentWeekStats(events, ranges);
+  assert.equal(stats.plannedTotal, 4);
+  assert.equal(stats.plannedCompleted, 3);
+  assert.equal(stats.unplannedEventsLogged, 1);
+  assert.equal(stats.completionRate, 75);
+});
+
 test("weekly chart data separates planned and completed counts by category", () => {
   const ranges = getDashboardDateRanges("2026-11-04");
   const events = [
