@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { getCalendarWeekRange } = require("../calendar/week");
-const { renderRoutineFormPage, renderWeekPage } = require("./pages");
+const { renderEventFormPage, renderRoutineFormPage, renderWeekPage } = require("./pages");
 
 test("untimed routine events render above the hourly grid without a time label", () => {
   const html = renderWeekPage({
@@ -65,4 +65,18 @@ test("routine form shows and preserves routine notes", () => {
 
   assert.match(html, /name="notes"/);
   assert.match(html, /Bring a water bottle/);
+});
+
+test("event form permits both times to be left blank", () => {
+  const html = renderEventFormPage({
+    mode: "create",
+    event: { startTime: null, endTime: null },
+    categories: [],
+    email: "user@example.test",
+    csrfToken: "csrf",
+  });
+
+  assert.match(html, /Leave both blank to place this event in the Any Time row/);
+  assert.doesNotMatch(html, /id="event-start"[^>]*required/);
+  assert.doesNotMatch(html, /id="event-end"[^>]*required/);
 });

@@ -647,9 +647,10 @@ function renderEventFormPage({ mode, event = {}, categories = [], email, csrfTok
           ${fieldError("date")}
 
           <div class="event-time-fields">
-            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}" required${describedBy("startTime")}>${fieldError("startTime")}</div>
-            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}" required${describedBy("endTime")}>${fieldError("endTime")}</div>
+            <div><label for="event-start">Starts</label><input id="event-start" name="startTime" type="time" value="${safe(event.startTime)}"${describedBy("startTime")}>${fieldError("startTime")}</div>
+            <div><label for="event-end">Ends</label><input id="event-end" name="endTime" type="time" value="${safe(event.endTime)}"${describedBy("endTime")}>${fieldError("endTime")}</div>
           </div>
+          <p class="event-time-hint">Leave both blank to place this event in the Any Time row.</p>
 
           <div class="event-category-field" data-category-field="Workout" data-field-name="distanceMi"${selectedCategoryName === "Workout" ? "" : " hidden"}>
             <label for="event-distance">Distance <span class="field-unit">miles</span></label>

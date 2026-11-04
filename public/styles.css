@@ -423,6 +423,7 @@ a { color: inherit; }
 .routine-delete-summary strong { color: #445548; font: 500 19px/1.2 var(--display); }
 .routine-delete-summary span { color: #7e8b80; font-size: 10px; }
 .routine-time-hint { margin: -8px 0 18px; color: #859186; font-size: 10px; }
+.event-time-hint { margin: -8px 0 18px; color: #859186; font-size: 10px; }
 .week-footer a { color: inherit; text-decoration: none; }
 .week-footer a:hover { color: var(--green-dark); }
 
