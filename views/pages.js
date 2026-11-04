@@ -221,12 +221,61 @@ function renderStarControl(event, csrfToken, variant = "") {
   return `<button class="event-star-button${variantClass}${isStarred ? " is-starred" : ""}" type="button" data-star-toggle data-starred="${isStarred}" data-event-id="${escapeHtml(event.id)}" data-csrf-token="${escapeHtml(csrfToken)}" aria-label="${escapeHtml(actionLabel)}" aria-pressed="${isStarred}" title="${escapeHtml(actionLabel)}"><span aria-hidden="true">${isStarred ? "★" : "☆"}</span></button><span class="event-star-status" data-star-status role="status" aria-live="polite"></span>`;
 }
 
-function renderEventListPage({ events = [], email, csrfToken, notice, isStarredPage = false }) {
-  const sortedEvents = [...events].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+function renderEventFilters(categories, filters = {}) {
+  const categoryOptions = categories.map((category) => {
+    const selected = String(category.id) === String(filters.category) ? " selected" : "";
+    return `<option value="${escapeHtml(category.id)}"${selected}>${escapeHtml(category.name)}</option>`;
+  }).join("");
+  const selected = (field, value) => filters[field] === value ? " selected" : "";
+  return `<form class="event-filters" method="get" action="/events" aria-label="Filter and sort events">
+    <div class="event-filter-search">
+      <label for="event-search">Search title or notes</label>
+      <input id="event-search" type="search" name="q" maxlength="120" value="${escapeHtml(filters.query || "")}" placeholder="Search your events">
+    </div>
+    <div class="event-filter-grid">
+      <div class="event-filter-field">
+        <label for="event-filter-category">Category</label>
+        <select id="event-filter-category" name="category"><option value="">All categories</option>${categoryOptions}</select>
+      </div>
+      <div class="event-filter-field">
+        <label for="event-filter-planned">Plan</label>
+        <select id="event-filter-planned" name="planned">
+          <option value="">Any plan</option>
+          <option value="planned"${selected("planned", "planned")}>Planned</option>
+          <option value="unplanned"${selected("planned", "unplanned")}>Unplanned</option>
+        </select>
+      </div>
+      <div class="event-filter-field">
+        <label for="event-filter-completed">Completion</label>
+        <select id="event-filter-completed" name="completed">
+          <option value="">Any status</option>
+          <option value="done"${selected("completed", "done")}>Done</option>
+          <option value="not-done"${selected("completed", "not-done")}>Not done</option>
+        </select>
+      </div>
+      <div class="event-filter-field">
+        <label for="event-filter-sort">Sort by</label>
+        <select id="event-filter-sort" name="sort">
+          <option value="newest"${selected("sort", "newest")}>Newest date</option>
+          <option value="oldest"${selected("sort", "oldest")}>Oldest date</option>
+          <option value="category"${selected("sort", "category")}>Category A–Z</option>
+        </select>
+      </div>
+    </div>
+    <div class="event-filter-actions">
+      <button class="button button-primary" type="submit">Apply</button>
+      <a class="button button-secondary" href="/events">Clear all</a>
+    </div>
+  </form>`;
+}
+
+function renderEventListPage({ events = [], email, csrfToken, notice, isStarredPage = false, categories = [], filters = {} }) {
+  const sortedEvents = [...events];
   const pageTitle = isStarredPage ? "Starred" : "Your events";
   const pageDescription = isStarredPage
     ? "The events you marked to find quickly."
     : "All the pieces you're making room for, in one place.";
+  const hasActiveFilters = Boolean(filters.category || filters.planned || filters.completed || filters.query);
   const rows = sortedEvents.length
     ? `<div class="event-list" role="list">${sortedEvents.map((event) => {
       const color = safeCategoryColor(event.categoryColor);
@@ -253,6 +302,14 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
           <p>Star an event from its row or detail page and it will show up here.</p>
           <a class="button button-primary" href="/events">Browse your events <span aria-hidden="true">↗</span></a>
         </div>`
+      : hasActiveFilters
+        ? `<div class="event-empty">
+            <span class="event-empty-mark" aria-hidden="true"></span>
+            <span class="eyebrow">NOTHING MATCHED</span>
+            <h2>No events match your search.</h2>
+            <p>Try changing a filter or search term.</p>
+            <a class="button button-primary" href="/events">Clear filters</a>
+          </div>`
       : `<div class="event-empty">
         <span class="event-empty-mark" aria-hidden="true"></span>
         <span class="eyebrow">A LITTLE ROOM TO BEGIN</span>
@@ -277,6 +334,7 @@ function renderEventListPage({ events = [], email, csrfToken, notice, isStarredP
       ${actions}
     </section>
     ${notice && !isStarredPage ? `<div class="message message-notice event-notice" role="status">${escapeHtml(notice)}</div>` : ""}
+    ${!isStarredPage ? renderEventFilters(categories, filters) : ""}
     <section class="event-list-panel" aria-label="${isStarredPage ? "Starred events" : "Your events"}">
       <div class="event-list-heading"><span>${isStarredPage ? "YOUR STARRED EVENTS" : "YOUR PLANS"}</span><span>${sortedEvents.length} ${sortedEvents.length === 1 ? "event" : "events"}</span></div>
       ${rows}

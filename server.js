@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
-const { and, desc, eq } = require("drizzle-orm");
+const { and, asc, desc, eq, ilike, or } = require("drizzle-orm");
 const { db, pool } = require("./db");
 const { categories, events, stars, users } = require("./db/schema");
 const { createSessionToken, hashPassword, verifyPassword, verifySessionToken } = require("./auth");
@@ -388,13 +388,38 @@ app.get("/week", (req, res) => {
 
 app.get("/events", async (req, res, next) => {
   try {
+    const eventCategories = await getEventCategories();
+    const queryValue = (value) => typeof value === "string" ? value.trim() : "";
+    const requestedCategory = queryValue(req.query.category);
+    const categoryId = parsePositiveId(requestedCategory);
+    const filters = {
+      category: eventCategories.some((category) => category.id === categoryId) ? String(categoryId) : "",
+      planned: ["planned", "unplanned"].includes(queryValue(req.query.planned)) ? queryValue(req.query.planned) : "",
+      completed: ["done", "not-done"].includes(queryValue(req.query.completed)) ? queryValue(req.query.completed) : "",
+      query: queryValue(req.query.q).slice(0, 120),
+      sort: ["newest", "oldest", "category"].includes(queryValue(req.query.sort)) ? queryValue(req.query.sort) : "newest",
+    };
+    const conditions = [eq(events.userId, req.currentUser.id)];
+    if (filters.category) conditions.push(eq(events.categoryId, Number(filters.category)));
+    if (filters.planned) conditions.push(eq(events.planned, filters.planned === "planned"));
+    if (filters.completed) conditions.push(eq(events.completed, filters.completed === "done"));
+    if (filters.query) {
+      const searchPattern = `%${filters.query.replace(/[\\%_]/g, "\\$&")}%`;
+      conditions.push(or(ilike(events.title, searchPattern), ilike(events.notes, searchPattern)));
+    }
+
+    const ordering = filters.sort === "category"
+      ? [asc(categories.name), desc(events.date), desc(events.startTime), desc(events.id)]
+      : filters.sort === "oldest"
+        ? [asc(events.date), asc(events.startTime), asc(events.id)]
+        : [desc(events.date), desc(events.startTime), desc(events.id)];
     const userEvents = await db
       .select({ ...joinedEventSelection, starId: stars.id })
       .from(events)
       .innerJoin(categories, eq(events.categoryId, categories.id))
       .leftJoin(stars, and(eq(stars.eventId, events.id), eq(stars.userId, req.currentUser.id)))
-      .where(eq(events.userId, req.currentUser.id))
-      .orderBy(desc(events.date), desc(events.startTime), desc(events.id));
+      .where(and(...conditions))
+      .orderBy(...ordering);
     const csrfToken = issueCsrfToken(res);
     const notice = {
       created: "Your event was added.",
@@ -407,6 +432,8 @@ app.get("/events", async (req, res, next) => {
         email: req.currentUser.email,
         csrfToken,
         notice,
+        categories: eventCategories,
+        filters,
       }),
     );
   } catch (error) {
