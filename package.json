@@ -97,6 +97,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "db:push": "drizzle-kit push --force",
+    "db:seed": "node db/seed.js",
     "test": "node --test"
   },
   "repository": {
