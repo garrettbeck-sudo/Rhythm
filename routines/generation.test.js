@@ -23,3 +23,12 @@ test("active routines create planned events only on their matching weekdays", ()
   assert.equal(untimed.startTime, null);
   assert.equal(untimed.endTime, null);
 });
+
+test("a skipped routine occurrence stays skipped only on that date", () => {
+  const week = [...getCalendarWeekRange("2026-11-04").days, { date: "2026-11-10" }];
+  const generated = buildRoutineEventValues(41, [
+    { id: 7, categoryId: 1, title: "Tuesday intervals", dayOfWeek: 2, startTime: "06:00", endTime: "06:45", active: true },
+  ], week, [{ routineId: 7, date: "2026-11-03" }]);
+
+  assert.deepEqual(generated.map(({ date }) => date), ["2026-11-10"]);
+});

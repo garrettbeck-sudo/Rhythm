@@ -466,6 +466,12 @@ a { color: inherit; }
 .event-category-field[hidden] { display: none; }
 .event-category-field { display: flex; flex-direction: column; }
 .event-form-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.conflict-warning { margin: 0 0 21px; padding: 15px 17px; border: 1px solid #e8c9a9; border-radius: 11px; color: #705843; background: #fbf4e9; }
+.conflict-warning h3 { margin: 0 0 7px; color: #61482f; font-size: 13px; }
+.conflict-warning p { margin: 0 0 8px; font-size: 11px; line-height: 1.55; }
+.conflict-warning ul { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 18px; font-size: 11px; }
+.conflict-warning li span { margin-left: 8px; color: #91785f; }
+.conflict-warning-actions { margin-top: 16px; }
 .button-secondary { min-height: 45px; color: #617165; border: 1px solid #dbe4d8; background: #f7f9f4; text-decoration: none; }
 .button-secondary:hover { background: #edf3e9; }
 

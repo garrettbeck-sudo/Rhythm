@@ -79,5 +79,25 @@ test("event form permits both times to be left blank", () => {
   assert.match(html, /Leave both blank to place this event in the Any Time row/);
   assert.doesNotMatch(html, /id="event-start"[^>]*required/);
   assert.doesNotMatch(html, /id="event-end"[^>]*required/);
-  assert.match(html, /src="\/assets\/events\.js\?v=2"/);
+  assert.match(html, /src="\/assets\/events\.js\?v=3"/);
+});
+
+test("event conflict warning names conflicts and offers explicit choices", () => {
+  const html = renderEventFormPage({
+    mode: "create",
+    event: { title: "Morning run", startTime: "07:00", endTime: "08:00" },
+    categories: [{ id: 1, name: "Workout" }],
+    email: "user@example.test",
+    csrfToken: "csrf",
+    conflicts: [
+      { id: 42, title: "Team meeting", startTime: "07:30", endTime: "08:30" },
+    ],
+  });
+
+  assert.match(html, /Team meeting/);
+  assert.match(html, /Team meeting<\/strong><span>07:30/);
+  assert.match(html, /name="conflictAction" value="save"/);
+  assert.match(html, /name="conflictAction" value="back"/);
+  assert.match(html, /name="confirmedConflictIds" value="42"/);
+  assert.match(html, /Saving anyway will remove the conflicting event listed here/);
 });

@@ -56,6 +56,27 @@ const routines = pgTable(
   ],
 );
 
+const routineSkips = pgTable(
+  "routine_skips",
+  {
+    id: integer("id").generatedAlwaysAsIdentity().primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    routineId: integer("routine_id")
+      .notNull()
+      .references(() => routines.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull(),
+  },
+  (table) => [
+    unique("routine_skips_user_routine_date_unique").on(
+      table.userId,
+      table.routineId,
+      table.date,
+    ),
+  ],
+);
+
 const events = pgTable(
   "events",
   {
@@ -102,4 +123,4 @@ const stars = pgTable(
   ],
 );
 
-module.exports = { users, categories, events, routines, stars };
+module.exports = { users, categories, events, routines, routineSkips, stars };
